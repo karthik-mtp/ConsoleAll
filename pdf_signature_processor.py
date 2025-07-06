@@ -448,7 +448,7 @@ if __name__ == "__main__":
             # Use keywords that match the actual line breaks and spaces in the PDF text extraction
             #keywords=["BY:"],  # Single keyword to avoid duplicates (deduplication logic will handle overlaps anyway)
             #keywords=["Agreed and"],  # Single keyword to avoid duplicates (deduplication logic will handle overlaps anyway)
-            keywords=["CONFIRMED BY:"],  # Simple approach - just look for "By:" occurrences
+            keywords=["AUTHORISED SIGNATURE"],  # Simple approach - just look for "By:" occurrences
             signature_size=(100, 30),
             x_coord=None,
             y_coord=None,
