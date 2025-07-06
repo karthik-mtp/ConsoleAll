@@ -18,57 +18,64 @@ public class Program
                 new SignatureConfig
                 {
                     WorkingFolder = "C:\\Users\\Gomathi\\Downloads",
-                    InputPdfFilename = "INPUT.pdf",
+                    InputPdfFilename = "type1.pdf",
                     ItemId = "test_signature",
                     SignatureFilename = "signature.png",
-                    Keywords = new List<string> { "AUTHORIZED SIGNATURE", "sign here" },
-                    SignatureSize = new float[] { 120, 40 }
-                },
-                new SignatureConfig
-                {
-                    WorkingFolder = "C:\\Users\\Gomathi\\Downloads",
-                    InputPdfFilename = "ip1.pdf",
-                    ItemId = "test_signature_1",
-                    SignatureFilename = "signature.png",
-                    Keywords = new List<string> { "AUTHORIZED SIGNATURE", "sign here" },
-                    SignatureSize = new float[] { 120, 40 }
-                },
-                new SignatureConfig
-                {
-                    WorkingFolder = "C:\\Users\\Gomathi\\Downloads",
-                    InputPdfFilename = "ip2.pdf",
-                    ItemId = "test_signature_2",
-                    SignatureFilename = "signature.png",
-                    Keywords = new List<string> { "AUTHORIZED SIGNATURE", "sign here" },
-                    SignatureSize = new float[] { 120, 40 }
-                },
-                new SignatureConfig
-                {
-                    WorkingFolder = "C:\\Users\\Gomathi\\Downloads",
-                    InputPdfFilename = "ip3.pdf",
-                    ItemId = "test_signature_3",
-                    SignatureFilename = "signature.png",
-                    Keywords = new List<string> { "AUTHORIZED SIGNATURE", "sign here" },
-                    SignatureSize = new float[] { 120, 40 }
-                },
-                new SignatureConfig
-                {
-                    WorkingFolder = "C:\\Users\\Gomathi\\Downloads",
-                    InputPdfFilename = "ip4.pdf",
-                    ItemId = "test_signature_4",
-                    SignatureFilename = "signature.png",
-                    Keywords = new List<string> { "AUTHORIZED SIGNATURE", "sign here" },
-                    SignatureSize = new float[] { 120, 40 }
-                },
-                new SignatureConfig
-                {
-                    WorkingFolder = "C:\\Users\\Gomathi\\Downloads",
-                    InputPdfFilename = "ip5.pdf",
-                    ItemId = "test_signature_5",
-                    SignatureFilename = "signature.png",
-                    Keywords = new List<string> { "AUTHORIZED SIGNATURE", "sign here" },
-                    SignatureSize = new float[] { 120, 40 }
+                    Keywords = new List<string> { "AUTHORISED SIGNATURE" },
+                    SignatureSize = new float[] { 120, 40 },
+                    SkipNonEmpty = false  // Skip "By: someone" but allow "By:" (blank)
                 }
+                // ,
+                // new SignatureConfig
+                // {
+                //     WorkingFolder = "C:\\Users\\Gomathi\\Downloads",
+                //     InputPdfFilename = "ip1.pdf",
+                //     ItemId = "test_signature_1",
+                //     SignatureFilename = "signature.png",
+                //     Keywords = new List<string> { "By:" },
+                //     SignatureSize = new float[] { 120, 40 },
+                //     SkipNonEmpty = true  // Skip "By: someone" but allow "By:" (blank)
+                // },
+                // new SignatureConfig
+                // {
+                //     WorkingFolder = "C:\\Users\\Gomathi\\Downloads",
+                //     InputPdfFilename = "ip2.pdf",
+                //     ItemId = "test_signature_2",
+                //     SignatureFilename = "signature.png",
+                //     Keywords = new List<string> { "By:" },
+                //     SignatureSize = new float[] { 120, 40 },
+                //     SkipNonEmpty = true  // Skip "By: someone" but allow "By:" (blank)
+                // },
+                // new SignatureConfig
+                // {
+                //     WorkingFolder = "C:\\Users\\Gomathi\\Downloads",
+                //     InputPdfFilename = "ip3.pdf",
+                //     ItemId = "test_signature_3",
+                //     SignatureFilename = "signature.png",
+                //     Keywords = new List<string> { "By:" },
+                //     SignatureSize = new float[] { 120, 40 },
+                //     SkipNonEmpty = true  // Skip "By: someone" but allow "By:" (blank)
+                // },
+                // new SignatureConfig
+                // {
+                //     WorkingFolder = "C:\\Users\\Gomathi\\Downloads",
+                //     InputPdfFilename = "ip4.pdf",
+                //     ItemId = "test_signature_4",
+                //     SignatureFilename = "signature.png",
+                //     Keywords = new List<string> { "By:" },
+                //     SignatureSize = new float[] { 120, 40 },
+                //     SkipNonEmpty = true  // Skip "By: someone" but allow "By:" (blank)
+                // },
+                // new SignatureConfig
+                // {
+                //     WorkingFolder = "C:\\Users\\Gomathi\\Downloads",
+                //     InputPdfFilename = "ip5.pdf",
+                //     ItemId = "test_signature_5",
+                //     SignatureFilename = "signature.png",
+                //     Keywords = new List<string> { "By:" },
+                //     SignatureSize = new float[] { 120, 40 },
+                //     SkipNonEmpty = true  // Skip "By: someone" but allow "By:" (blank)
+                // }
             };
 
         try
