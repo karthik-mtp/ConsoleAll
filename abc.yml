@@ -1,0 +1,37 @@
+trigger: none  # Manually run, no auto-trigger
+
+parameters:
+  - name: environment
+    displayName: Select Environment
+    type: string
+    default: dev
+    values:
+      - dev
+      - test
+      - uat
+      - prod
+
+variables:
+  - name: environment
+    value: ${{ parameters.environment }}
+  - group: vg-dev  # Assuming this group contains environment-specific variables
+
+stages:
+  - stage: DisplaySteps
+    displayName: Display Step Names
+    jobs:
+      - job: ShowSteps
+        displayName: Run Display Steps
+        steps:
+          - script: 'echo "Step 1: data read from varaible group $(appName)"'
+            displayName: Step 1 - Display Variable Group}"'
+             
+            
+          - script: 'echo "Step 1: Initialization - Environment is ${{ parameters.environment }}"'
+            displayName: Step 1 - Initialization
+
+          - script: 'echo "Step 2: Validation - Running in ${{ parameters.environment }} environment"'
+            displayName: Step 2 - Validation
+
+          - script: 'echo "Step 3: Deployment - Simulating deployment to ${{ parameters.environment }}"'
+            displayName: Step 3 - Deployment
