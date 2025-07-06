@@ -103,6 +103,7 @@ public class SignatureConfig
         public float? XCoord { get; set; }
         public float? YCoord { get; set; }
         public List<int>? PageNumbers { get; set; }
+        public bool SkipNonEmpty { get; set; } = false;  // Skip matches that have content after the keyword
     }
 
     public class SignatureResult
