@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Outlook Compose Mail</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+</head>
+<body>
+    <div class="overlay" id="overlay"></div>
+    
+    <!-- Main page content -->
+    <div class="main-content">
+        <h1>Outlook Compose Mail Demo</h1>
+        <button class="compose-btn" onclick="openComposeModal()">
+            <i class="fas fa-plus"></i> New Mail
+        </button>
+        
+        <!-- Sample JSON data display -->
+        <div class="json-display">
+            <h3>Sample JSON Data:</h3>
+            <pre id="jsonData"></pre>
+        </div>
+    </div>
+
+    <!-- Compose Mail Modal -->
+    <div class="compose-modal" id="composeModal">
+        <div class="modal-header">
+            <div class="modal-title">
+                <i class="fas fa-envelope"></i>
+                New message
+            </div>
+            <div class="modal-controls">
+                <button class="minimize-btn" title="Minimize">
+                    <i class="fas fa-minus"></i>
+                </button>
+                <button class="maximize-btn" title="Maximize">
+                    <i class="fas fa-expand"></i>
+                </button>
+                <button class="close-btn" onclick="closeComposeModal()" title="Close">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+        </div>
+
+        <div class="modal-toolbar">
+            <div class="toolbar-section">
+                <button class="send-btn" onclick="sendMail()">
+                    <i class="fas fa-paper-plane"></i> Send
+                </button>
+                <button class="toolbar-btn" title="Attach file">
+                    <i class="fas fa-paperclip"></i>
+                </button>
+                <button class="toolbar-btn" title="Insert emoji">
+                    <i class="fas fa-smile"></i>
+                </button>
+                <button class="toolbar-btn" title="Font">
+                    <i class="fas fa-font"></i>
+                </button>
+                <button class="toolbar-btn" title="Bold">
+                    <i class="fas fa-bold"></i>
+                </button>
+                <button class="toolbar-btn" title="Italic">
+                    <i class="fas fa-italic"></i>
+                </button>
+                <button class="toolbar-btn" title="Underline">
+                    <i class="fas fa-underline"></i>
+                </button>
+            </div>
+            <div class="toolbar-section">
+                <button class="toolbar-btn" title="Discard">
+                    <i class="fas fa-trash"></i>
+                </button>
+            </div>
+        </div>
+
+        <div class="modal-content">
+            <div class="compose-fields">
+                <!-- To Field -->
+                <div class="field-row">
+                    <label class="field-label">To</label>
+                    <div class="field-input-container">
+                        <input type="email" id="toField" class="field-input" placeholder="Enter email addresses separated by semicolons">
+                        <div class="field-buttons">
+                            <button class="cc-btn" onclick="toggleCc()">Cc</button>
+                            <button class="bcc-btn" onclick="toggleBcc()">Bcc</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- CC Field (hidden by default) -->
+                <div class="field-row cc-row" id="ccRow" style="display: none;">
+                    <label class="field-label">Cc</label>
+                    <div class="field-input-container">
+                        <input type="email" id="ccField" class="field-input" placeholder="Enter CC recipients">
+                    </div>
+                </div>
+
+                <!-- BCC Field (hidden by default) -->
+                <div class="field-row bcc-row" id="bccRow" style="display: none;">
+                    <label class="field-label">Bcc</label>
+                    <div class="field-input-container">
+                        <input type="email" id="bccField" class="field-input" placeholder="Enter BCC recipients">
+                    </div>
+                </div>
+
+                <!-- Subject Field -->
+                <div class="field-row">
+                    <label class="field-label">Subject</label>
+                    <div class="field-input-container">
+                        <input type="text" id="subjectField" class="field-input" placeholder="Add a subject">
+                    </div>
+                </div>
+
+                <!-- Attachments Section -->
+                <div class="attachments-section" id="attachmentsSection">
+                    <div class="attachments-header">
+                        <i class="fas fa-paperclip"></i>
+                        <span>Attachments</span>
+                    </div>
+                    <div class="attachments-list" id="attachmentsList">
+                        <!-- Attachments will be populated here -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- Message Body -->
+            <div class="message-body">
+                <div class="body-editor" id="bodyEditor" contenteditable="true" placeholder="Type your message here...">
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
