@@ -22,8 +22,9 @@ public class Program
                     ItemId = "test_signature",
                     SignatureFilename = "signature.png",
                     Keywords = new List<string> { "AUTHORISED SIGNATURE" },
-                    SignatureSize = new float[] { 120, 40 },
-                    SkipNonEmpty = false  // Skip "By: someone" but allow "By:" (blank)
+                    SignatureSize = null, // Use image's natural size with proper DPI conversion
+                    SkipNonEmpty = false,  // Skip "By: someone" but allow "By:" (blank)
+                    SignaturePosition = "right"  // Place signature to the right of the keyword
                 }
                 // ,
                 // new SignatureConfig
@@ -33,8 +34,9 @@ public class Program
                 //     ItemId = "test_signature_1",
                 //     SignatureFilename = "signature.png",
                 //     Keywords = new List<string> { "By:" },
-                //     SignatureSize = new float[] { 120, 40 },
-                //     SkipNonEmpty = true  // Skip "By: someone" but allow "By:" (blank)
+                //     SignatureSize = new float[] { 120, 40 }, // Specify exact size
+                //     SkipNonEmpty = true,  // Skip "By: someone" but allow "By:" (blank)
+                //     SignaturePosition = "bottom"  // Place signature below the keyword
                 // },
                 // new SignatureConfig
                 // {
@@ -43,8 +45,9 @@ public class Program
                 //     ItemId = "test_signature_2",
                 //     SignatureFilename = "signature.png",
                 //     Keywords = new List<string> { "By:" },
-                //     SignatureSize = new float[] { 120, 40 },
-                //     SkipNonEmpty = true  // Skip "By: someone" but allow "By:" (blank)
+                //     SignatureSize = null, // Use natural image size
+                //     SkipNonEmpty = true,  // Skip "By: someone" but allow "By:" (blank)
+                //     SignaturePosition = "right"  // Place signature to the right of the keyword
                 // },
                 // new SignatureConfig
                 // {
@@ -54,7 +57,8 @@ public class Program
                 //     SignatureFilename = "signature.png",
                 //     Keywords = new List<string> { "By:" },
                 //     SignatureSize = new float[] { 120, 40 },
-                //     SkipNonEmpty = true  // Skip "By: someone" but allow "By:" (blank)
+                //     SkipNonEmpty = true,  // Skip "By: someone" but allow "By:" (blank)
+                //     SignaturePosition = "top"  // Place signature above the keyword
                 // },
                 // new SignatureConfig
                 // {
@@ -63,8 +67,9 @@ public class Program
                 //     ItemId = "test_signature_4",
                 //     SignatureFilename = "signature.png",
                 //     Keywords = new List<string> { "By:" },
-                //     SignatureSize = new float[] { 120, 40 },
-                //     SkipNonEmpty = true  // Skip "By: someone" but allow "By:" (blank)
+                //     SignatureSize = null, // Use natural image size
+                //     SkipNonEmpty = true,  // Skip "By: someone" but allow "By:" (blank)
+                //     SignaturePosition = "left"  // Place signature to the left of the keyword
                 // },
                 // new SignatureConfig
                 // {
@@ -73,8 +78,9 @@ public class Program
                 //     ItemId = "test_signature_5",
                 //     SignatureFilename = "signature.png",
                 //     Keywords = new List<string> { "By:" },
-                //     SignatureSize = new float[] { 120, 40 },
-                //     SkipNonEmpty = true  // Skip "By: someone" but allow "By:" (blank)
+                //     SignatureSize = new float[] { 150, 50 }, // Custom size
+                //     SkipNonEmpty = true,  // Skip "By: someone" but allow "By:" (blank)
+                //     SignaturePosition = "right"  // Place signature to the right of the keyword
                 // }
             };
 
@@ -111,6 +117,7 @@ public class SignatureConfig
         public float? YCoord { get; set; }
         public List<int>? PageNumbers { get; set; }
         public bool SkipNonEmpty { get; set; } = false;  // Skip matches that have content after the keyword
+        public string SignaturePosition { get; set; } = "top";  // Options: "top", "bottom", "left", "right"
     }
 
     public class SignatureResult
