@@ -1,0 +1,416 @@
+/* Reset and base styles */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background-color: #f3f2f1;
+    color: #323130;
+    line-height: 1.4;
+}
+
+/* Main content styles */
+.main-content {
+    padding: 40px;
+    max-width: 1200px;
+    margin: 0 auto;
+}
+
+.main-content h1 {
+    color: #106ebe;
+    margin-bottom: 30px;
+    font-weight: 600;
+}
+
+.compose-btn {
+    background: #106ebe;
+    color: white;
+    border: none;
+    padding: 12px 24px;
+    border-radius: 4px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: background-color 0.2s;
+}
+
+.compose-btn:hover {
+    background: #005a9e;
+}
+
+.json-display {
+    margin-top: 30px;
+    background: white;
+    padding: 20px;
+    border-radius: 4px;
+    border: 1px solid #edebe9;
+}
+
+.json-display h3 {
+    margin-bottom: 15px;
+    color: #323130;
+}
+
+#jsonData {
+    background: #f8f8f8;
+    padding: 15px;
+    border-radius: 4px;
+    border: 1px solid #e1dfdd;
+    overflow-x: auto;
+    font-size: 13px;
+    color: #605e5c;
+}
+
+/* Overlay */
+.overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.4);
+    z-index: 999;
+    display: none;
+}
+
+.overlay.active {
+    display: block;
+}
+
+/* Compose Modal */
+.compose-modal {
+    position: fixed;
+    top: 10%;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 90%;
+    max-width: 800px;
+    height: 80vh;
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 16px 64px rgba(0, 0, 0, 0.24);
+    z-index: 1000;
+    display: none;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.compose-modal.active {
+    display: flex;
+}
+
+/* Modal Header */
+.modal-header {
+    background: #106ebe;
+    color: white;
+    padding: 12px 16px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-radius: 8px 8px 0 0;
+}
+
+.modal-title {
+    font-weight: 600;
+    font-size: 14px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.modal-controls {
+    display: flex;
+    gap: 4px;
+}
+
+.modal-controls button {
+    background: transparent;
+    border: none;
+    color: white;
+    padding: 6px 8px;
+    cursor: pointer;
+    border-radius: 4px;
+    font-size: 12px;
+    transition: background-color 0.2s;
+}
+
+.modal-controls button:hover {
+    background: rgba(255, 255, 255, 0.1);
+}
+
+/* Toolbar */
+.modal-toolbar {
+    background: #faf9f8;
+    border-bottom: 1px solid #edebe9;
+    padding: 8px 16px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.toolbar-section {
+    display: flex;
+    gap: 4px;
+    align-items: center;
+}
+
+.send-btn {
+    background: #106ebe;
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 4px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-right: 12px;
+    transition: background-color 0.2s;
+}
+
+.send-btn:hover {
+    background: #005a9e;
+}
+
+.toolbar-btn {
+    background: transparent;
+    border: none;
+    color: #605e5c;
+    padding: 8px;
+    cursor: pointer;
+    border-radius: 4px;
+    font-size: 14px;
+    transition: background-color 0.2s;
+}
+
+.toolbar-btn:hover {
+    background: #edebe9;
+}
+
+/* Modal Content */
+.modal-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+/* Compose Fields */
+.compose-fields {
+    background: white;
+    border-bottom: 1px solid #edebe9;
+}
+
+.field-row {
+    display: flex;
+    align-items: center;
+    border-bottom: 1px solid #f3f2f1;
+    min-height: 40px;
+}
+
+.field-label {
+    width: 60px;
+    padding: 8px 16px;
+    font-weight: 600;
+    font-size: 13px;
+    color: #605e5c;
+    background: #faf9f8;
+    border-right: 1px solid #edebe9;
+    display: flex;
+    align-items: center;
+}
+
+.field-input-container {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    padding: 0 16px;
+}
+
+.field-input {
+    flex: 1;
+    border: none;
+    outline: none;
+    font-size: 13px;
+    font-family: inherit;
+    padding: 8px 0;
+    color: #323130;
+}
+
+.field-input::placeholder {
+    color: #a19f9d;
+}
+
+.field-buttons {
+    display: flex;
+    gap: 8px;
+}
+
+.cc-btn, .bcc-btn {
+    background: transparent;
+    border: none;
+    color: #106ebe;
+    font-size: 12px;
+    cursor: pointer;
+    padding: 4px 8px;
+    border-radius: 2px;
+    transition: background-color 0.2s;
+}
+
+.cc-btn:hover, .bcc-btn:hover {
+    background: #f3f2f1;
+}
+
+/* Attachments */
+.attachments-section {
+    background: #faf9f8;
+    border-bottom: 1px solid #edebe9;
+    padding: 12px 16px;
+    display: none;
+}
+
+.attachments-section.active {
+    display: block;
+}
+
+.attachments-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    color: #605e5c;
+    margin-bottom: 8px;
+}
+
+.attachments-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.attachment-item {
+    display: flex;
+    align-items: center;
+    background: white;
+    border: 1px solid #edebe9;
+    border-radius: 4px;
+    padding: 8px 12px;
+    font-size: 12px;
+    max-width: 200px;
+}
+
+.attachment-icon {
+    color: #106ebe;
+    margin-right: 8px;
+    font-size: 14px;
+}
+
+.attachment-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.attachment-name {
+    font-weight: 600;
+    color: #323130;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.attachment-size {
+    color: #605e5c;
+    font-size: 11px;
+}
+
+.attachment-remove {
+    background: transparent;
+    border: none;
+    color: #a19f9d;
+    cursor: pointer;
+    padding: 2px;
+    margin-left: 8px;
+    border-radius: 2px;
+    transition: color 0.2s;
+}
+
+.attachment-remove:hover {
+    color: #d13438;
+}
+
+/* Message Body */
+.message-body {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.body-editor {
+    flex: 1;
+    padding: 16px;
+    border: none;
+    outline: none;
+    font-size: 14px;
+    font-family: inherit;
+    line-height: 1.5;
+    overflow-y: auto;
+    resize: none;
+}
+
+.body-editor:empty:before {
+    content: attr(placeholder);
+    color: #a19f9d;
+    pointer-events: none;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .compose-modal {
+        top: 5%;
+        width: 95%;
+        height: 90vh;
+    }
+    
+    .field-label {
+        width: 50px;
+        font-size: 12px;
+    }
+    
+    .field-input {
+        font-size: 12px;
+    }
+    
+    .toolbar-section {
+        gap: 2px;
+    }
+    
+    .toolbar-btn {
+        padding: 6px;
+    }
+}
+
+/* Animation */
+.compose-modal.active {
+    animation: slideIn 0.3s ease-out;
+}
+
+@keyframes slideIn {
+    from {
+        opacity: 0;
+        transform: translateX(-50%) translateY(-20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(-50%) translateY(0);
+    }
+}

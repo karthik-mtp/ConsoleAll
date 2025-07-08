@@ -21,12 +21,13 @@ class SignatureConfig:
     item_id: str
     signature_filename: str
     keywords: Optional[List[str]] = None
-    signature_size: Optional[tuple[float, float]] = None
+    signature_size: Optional[tuple[float, float]] = None  # This will be automatically set to original image size
     output_path: Optional[str] = None
     x_coord: Optional[float] = None
     y_coord: Optional[float] = None
     page_numbers: Optional[List[int]] = None
     skip_non_empty: bool = False  # If True, skip matches that have content after the keyword
+    signature_position: str = "top"  # Options: "top", "bottom", "left", "right"
 
 @dataclass
 class SignatureResult:
@@ -76,13 +77,14 @@ class PDFSignatureProcessor:
             logger.error(f"Validation error: {str(e)}")
             return False
 
-    def _find_keyword_locations(self, pdf_path: str, keywords: List[str]) -> List[tuple[int, float, float]]:
+    def _find_keyword_locations(self, pdf_path: str, keywords: List[str], config: SignatureConfig) -> List[tuple[int, float, float]]:
         """
-        Find the locations of keywords in the PDF.
+        Find the locations of keywords in the PDF and calculate signature placement.
         
         Args:
             pdf_path: Path to the PDF file
             keywords: List of keywords to search for
+            config: SignatureConfig object containing placement preferences
             
         Returns:
             List of tuples containing (page_number, x_coord, y_coord)
@@ -143,14 +145,36 @@ class PDFSignatureProcessor:
                                                     if "by:" in word['text'].lower():
                                                         logger.info(f"Found 'By:' word at ({word['x0']}, {word['top']}): '{word['text']}'")
                                                         
-                                                        # Place signature above this word
-                                                        signature_y = float(word['top']) - config.signature_size[1] - 10
+                                                        # Get signature size for positioning calculation
+                                                        if config.signature_size is not None:
+                                                            actual_signature_size = config.signature_size
+                                                        else:
+                                                            # For positioning, calculate proper PDF points from image
+                                                            signature_image_path = os.path.join(config.working_folder, config.signature_filename)
+                                                            with Image.open(signature_image_path) as sig_img:
+                                                                img_width_px, img_height_px = sig_img.size
+                                                                # Get DPI - default to 72 if not available
+                                                                dpi = getattr(sig_img, 'info', {}).get('dpi', (72, 72))
+                                                                if isinstance(dpi, tuple):
+                                                                    dpi_x, dpi_y = dpi
+                                                                else:
+                                                                    dpi_x = dpi_y = dpi
+                                                                # Convert to PDF points
+                                                                img_width_points = (img_width_px * 72) / dpi_x
+                                                                img_height_points = (img_height_px * 72) / dpi_y
+                                                                actual_signature_size = (img_width_points, img_height_points)
+                                                        
+                                                        # Calculate signature position based on config
+                                                        signature_x, signature_y = self._calculate_signature_position(
+                                                            word, actual_signature_size, config.signature_position
+                                                        )
+                                                        
                                                         locations.append((
                                                             page_num,
-                                                            float(word['x0']),
+                                                            signature_x,
                                                             signature_y
                                                         ))
-                                                        logger.info(f"Added signature location at ({word['x0']}, {signature_y})")
+                                                        logger.info(f"Added signature location at ({signature_x}, {signature_y}) - position: {config.signature_position}")
                                                         break
                                             else:
                                                 logger.info(f"Skipping - By='{by_content}', Name='{name_content}' (skip_non_empty={config.skip_non_empty})")
@@ -222,14 +246,37 @@ class PDFSignatureProcessor:
                                                         logger.info(f"Content found: '{content_text}'")
                                                 
                                                 if not should_skip:
-                                                    # Place signature above the keyword
-                                                    signature_y = float(word['top']) - config.signature_size[1] - 10
+                                                    # Get signature size for positioning calculation
+                                                    if config.signature_size is not None:
+                                                        actual_signature_size = config.signature_size
+                                                    else:
+                                                        # For positioning, calculate proper PDF points from image
+                                                        signature_image_path = os.path.join(config.working_folder, config.signature_filename)
+                                                        with Image.open(signature_image_path) as sig_img:
+                                                            img_width_px, img_height_px = sig_img.size
+                                                            # Get DPI - default to 72 if not available
+                                                            dpi = getattr(sig_img, 'info', {}).get('dpi', (72, 72))
+                                                            if isinstance(dpi, tuple):
+                                                                dpi_x, dpi_y = dpi
+                                                            else:
+                                                                dpi_x = dpi_y = dpi
+                                                            # Convert to PDF points
+                                                            img_width_points = (img_width_px * 72) / dpi_x
+                                                            img_height_points = (img_height_px * 72) / dpi_y
+                                                            actual_signature_size = (img_width_points, img_height_points)
+                                                    
+                                                    # Calculate signature position based on config
+                                                    signature_x, signature_y = self._calculate_signature_position(
+                                                        word, actual_signature_size, config.signature_position
+                                                    )
+                                                    
                                                     locations.append((
                                                         page_num,
-                                                        float(word['x0']),
+                                                        signature_x,
                                                         signature_y
                                                     ))
                                                     logger.info(f"Found keyword '{keyword}' on page {page_num + 1} at position ({word['x0']}, {word['top']})")
+                                                    logger.info(f"Placed signature at ({signature_x}, {signature_y}) - position: {config.signature_position}")
             
             logger.info(f"Total keyword locations found: {len(locations)}")
             return locations
@@ -237,9 +284,90 @@ class PDFSignatureProcessor:
             logger.error(f"Error finding keyword locations: {str(e)}")
             return []
 
+    def _calculate_signature_position(self, word: dict, signature_size: tuple[float, float], position: str) -> tuple[float, float]:
+        """
+        Calculate the signature position relative to the keyword word.
+        
+        Args:
+            word: Word dictionary containing position information (x0, x1, top, bottom)
+            signature_size: Tuple of (width, height) for the signature
+            position: Position relative to keyword ("top", "bottom", "left", "right")
+            
+        Returns:
+            Tuple of (x_coord, y_coord) for signature placement
+        """
+        word_x0 = float(word['x0'])
+        word_x1 = float(word['x1']) 
+        word_top = float(word['top'])
+        word_bottom = float(word['bottom'])
+        
+        sig_width, sig_height = signature_size
+        padding = 10  # Padding between keyword and signature
+        
+        if position.lower() == "top":
+            # Place signature above the keyword
+            signature_x = word_x0
+            signature_y = word_top - sig_height - padding
+        elif position.lower() == "bottom":
+            # Place signature below the keyword
+            signature_x = word_x0
+            signature_y = word_bottom + padding
+        elif position.lower() == "left":
+            # Place signature to the left of the keyword
+            signature_x = word_x0 - sig_width - padding
+            signature_y = word_top
+        elif position.lower() == "right":
+            # Place signature to the right of the keyword
+            signature_x = word_x1 + padding
+            signature_y = word_top
+        else:
+            # Default to top if invalid position specified
+            logger.warning(f"Invalid signature position '{position}', defaulting to 'top'")
+            signature_x = word_x0
+            signature_y = word_top - sig_height - padding
+        
+        # Ensure coordinates are not negative
+        signature_x = max(0, signature_x)
+        signature_y = max(0, signature_y)
+        
+        return signature_x, signature_y
+
+    def _prepare_signature_for_pdf(self, config: SignatureConfig) -> tuple[str, bytes]:
+        """
+        Prepare signature image for PDF insertion - uses original image as-is for maximum quality.
+        
+        Args:
+            config: SignatureConfig object
+            
+        Returns:
+            tuple: (image_path, image_bytes) for direct PDF insertion
+        """
+        try:
+            signature_image_path = os.path.join(config.working_folder, config.signature_filename)
+            
+            # Always use the original image without any processing
+            logger.info("Using original signature image without any processing for maximum quality")
+            
+            # When signature_size is None, we use the image completely as-is
+            if config.signature_size is None:
+                logger.info("signature_size=None, will use image as-is with its natural size")
+            else:
+                logger.info(f"Using specified signature_size: {config.signature_size}")
+            
+            # Read the original image bytes
+            with open(signature_image_path, 'rb') as f:
+                image_bytes = f.read()
+            
+            logger.info("Signature prepared using original file - no quality loss")
+            return signature_image_path, image_bytes
+                
+        except Exception as e:
+            logger.error(f"Error preparing signature: {str(e)}")
+            raise
+
     def _add_signature_to_pdf(self, config: SignatureConfig) -> str:
         """
-        Add signature to the PDF at specified locations.
+        Add signature to PDF using original image for maximum quality.
         
         Args:
             config: SignatureConfig object containing the configuration
@@ -250,84 +378,95 @@ class PDFSignatureProcessor:
         try:
             # Build full paths
             pdf_path = os.path.join(config.working_folder, config.input_pdf_filename)
-            signature_image_path = os.path.join(config.working_folder, config.signature_filename)
             
             # Open the PDF
             pdf_document = fitz.open(pdf_path)
             
-            # Prepare the signature image
-            signature_image = Image.open(signature_image_path)
+            # Prepare signature image (uses original image as-is)
+            signature_path, signature_bytes = self._prepare_signature_for_pdf(config)
             
-            # Default signature size if not specified (200x100 pixels)
-            if not config.signature_size:
-                config.signature_size = (200, 100)
+            logger.info(f"Prepared signature - size mode: {'Natural DPI-based sizing' if config.signature_size is None else f'Specified size: {config.signature_size}'}")
             
-            signature_image = signature_image.resize(
-                (int(config.signature_size[0]), int(config.signature_size[1])),
-                Image.Resampling.LANCZOS
-            )
-            
-            # Save the resized image temporarily with a unique path
-            temp_signature_path = os.path.join(config.working_folder, f"temp_signature_{config.item_id}.png")
-            signature_image.save(temp_signature_path, "PNG")
-            
-            # Determine signature placement
+            # Find signature placement locations
             locations = []
             if config.keywords:
-                # Find all keyword locations in the PDF (all pages)
                 logger.info(f"Searching for keywords: {config.keywords}")
-                locations = self._find_keyword_locations(pdf_path, config.keywords)
+                locations = self._find_keyword_locations(pdf_path, config.keywords, config)
                 logger.info(f"Found {len(locations)} keyword locations")
             
-            if not locations:  # If no keywords found or no keywords specified
-                # Only add signature if explicit coordinates are provided
-                if config.x_coord is not None and config.y_coord is not None:
-                    logger.info("No keyword locations found, using specified coordinates")
-                    pages = config.page_numbers if config.page_numbers else [0]  # Default to first page
-                    for page_num in pages:
-                        locations.append((page_num, config.x_coord, config.y_coord))
-                else:
-                    logger.info("No keyword locations found and no explicit coordinates provided, skipping signature placement")
+            if not locations and config.x_coord is not None and config.y_coord is not None:
+                logger.info("Using explicit coordinates")
+                pages = config.page_numbers if config.page_numbers else [0]
+                for page_num in pages:
+                    locations.append((page_num, config.x_coord, config.y_coord))
             
-            # Remove duplicate locations (same page, same coordinates)
-            unique_locations = []
-            seen_locations = set()
-            for page_num, x, y in locations:
-                # Round coordinates to avoid floating point precision issues
-                location_key = (page_num, round(x, 2), round(y, 2))
-                if location_key not in seen_locations:
-                    seen_locations.add(location_key)
-                    unique_locations.append((page_num, x, y))
-                else:
-                    logger.info(f"Skipping duplicate location: page {page_num + 1} at ({x}, {y})")
+            # Remove duplicates
+            unique_locations = list(set(locations))
+            logger.info(f"Adding signatures to {len(unique_locations)} locations")
             
-            locations = unique_locations
-            logger.info(f"After deduplication: {len(locations)} unique locations")
-            
-            # Add signature to each location (all keyword matches on all pages)
-            logger.info(f"Adding signatures to {len(locations)} locations")
-            for page_num, x, y in locations:
-                logger.info(f"Adding signature to page {page_num + 1} at position ({x}, {y})")
+            # Insert signatures using direct image bytes for maximum quality
+            for page_num, x, y in unique_locations:
                 page = pdf_document[page_num]
-                # Create rectangle for image placement
-                rect = fitz.Rect(
-                    x, y,
-                    x + config.signature_size[0],
-                    y + config.signature_size[1]
-                )
-                # Insert image with alpha channel support
-                page.insert_image(rect, filename=temp_signature_path, keep_proportion=True)
+                
+                if config.signature_size is None:
+                    # When signature_size=None, use image as-is with natural size
+                    logger.info(f"Adding signature to page {page_num + 1} at ({x}, {y}) using image's natural size")
+                    
+                    # Get the image dimensions in pixels to convert to PDF points properly
+                    signature_image_path = os.path.join(config.working_folder, config.signature_filename)
+                    with Image.open(signature_image_path) as sig_img:
+                        img_width_px, img_height_px = sig_img.size
+                        
+                        # Get DPI - default to 72 if not available (PDF standard)
+                        dpi = getattr(sig_img, 'info', {}).get('dpi', (72, 72))
+                        if isinstance(dpi, tuple):
+                            dpi_x, dpi_y = dpi
+                        else:
+                            dpi_x = dpi_y = dpi
+                        
+                        # Convert pixels to points (1 point = 1/72 inch)
+                        img_width_points = (img_width_px * 72) / dpi_x
+                        img_height_points = (img_height_px * 72) / dpi_y
+                        
+                        logger.info(f"Image: {img_width_px}x{img_height_px}px at {dpi_x}x{dpi_y} DPI = {img_width_points:.1f}x{img_height_points:.1f} points")
+                    
+                    # Create rectangle using proper PDF points
+                    rect = fitz.Rect(x, y, x + img_width_points, y + img_height_points)
+                    
+                    # Insert image with exact sizing
+                    try:
+                        page.insert_image(rect, stream=signature_bytes, keep_proportion=False)
+                        logger.info(f"Inserted signature using image bytes at natural size ({img_width_points:.1f}x{img_height_points:.1f} points)")
+                    except Exception as img_error:
+                        logger.warning(f"Bytes insertion failed, using file fallback: {img_error}")
+                        page.insert_image(rect, filename=signature_path, keep_proportion=False)
+                else:
+                    # When signature_size is specified, use the specified dimensions
+                    sig_width, sig_height = config.signature_size
+                    logger.info(f"Adding signature to page {page_num + 1} at ({x}, {y}) with specified size {config.signature_size}")
+                    
+                    # Create precise rectangle using specified signature size
+                    rect = fitz.Rect(x, y, x + sig_width, y + sig_height)
+                    
+                    # Insert image using bytes for maximum quality
+                    try:
+                        # Use image bytes directly for best quality
+                        page.insert_image(rect, stream=signature_bytes, keep_proportion=False)
+                        logger.info(f"Inserted signature using image bytes with specified dimensions")
+                    except Exception as img_error:
+                        # Fallback to file-based insertion
+                        logger.warning(f"Bytes insertion failed, using file fallback: {img_error}")
+                        page.insert_image(rect, filename=signature_path, keep_proportion=False)
             
-            # Save the result with signed_ prefix
+            # Save PDF with optimal quality settings
             output_filename = f"signed_{config.input_pdf_filename}"
             output_path = config.output_path or os.path.join(config.working_folder, output_filename)
-            pdf_document.save(output_path)
+            
+            # Save with no image compression to preserve original quality
+            pdf_document.save(output_path, deflate_images=False, deflate=False)
             pdf_document.close()
             
-            # Clean up temporary file
-            if os.path.exists(temp_signature_path):
-                os.remove(temp_signature_path)
-            
+            logger.info(f"PDF saved with original image quality to: {output_path}")
             return output_path
             
         except Exception as e:
@@ -374,6 +513,24 @@ class PDFSignatureProcessor:
         
         return results
 
+    def _get_actual_signature_size(self, config: SignatureConfig) -> tuple[float, float]:
+        """
+        Get the actual size the signature will be when placed in the PDF.
+        Only used when signature_size is explicitly specified.
+        
+        Args:
+            config: SignatureConfig object
+            
+        Returns:
+            Tuple of (width, height) in points for the signature
+        """
+        if config.signature_size is not None:
+            logger.info(f"Using specified signature_size: {config.signature_size}")
+            return config.signature_size
+        else:
+            # This method should not be called when signature_size is None
+            raise ValueError("_get_actual_signature_size called when signature_size is None")
+
 if __name__ == "__main__":
     import sys
     import json
@@ -404,7 +561,8 @@ if __name__ == "__main__":
                     x_coord=config_data.get('xCoord'),
                     y_coord=config_data.get('yCoord'),
                     page_numbers=config_data.get('pageNumbers'),
-                    skip_non_empty=config_data.get('skipNonEmpty', False)
+                    skip_non_empty=config_data.get('skipNonEmpty', False),
+                    signature_position=config_data.get('signaturePosition', 'top')
                 )
                 configs.append(config)
             
@@ -441,18 +599,21 @@ if __name__ == "__main__":
         # Original example usage when run directly
         processor = PDFSignatureProcessor()
         config = SignatureConfig(
-            working_folder="C:\\Users\\Gomathi\\Downloads",
-            input_pdf_filename="type1.pdf",
+            working_folder="C:\\Users\\KarthikMahalingam\\OneDrive - C-Mart Solutions Ltd\\Documents",
+            input_pdf_filename="sign.pdf",
             item_id="test_signature",
             signature_filename="signature.png",
-            # Use keywords that match the actual line breaks and spaces in the PDF text extraction
-            #keywords=["BY:"],  # Single keyword to avoid duplicates (deduplication logic will handle overlaps anyway)
-            #keywords=["Agreed and"],  # Single keyword to avoid duplicates (deduplication logic will handle overlaps anyway)
-            keywords=["AUTHORISED SIGNATURE"],  # Simple approach - just look for "By:" occurrences
-            signature_size=(100, 30),
+            keywords=["by:"],  # Simple keyword search
+            
+            # SIZE OPTIONS:
+            # When signature_size=None: Uses image as-is with proper DPI conversion
+            # This preserves the image's natural size and quality in the PDF
+            signature_size=None,  # Uses original image with proper DPI conversion
+            
             x_coord=None,
             y_coord=None,
-            skip_non_empty=False  # Skip "By: someone" but allow "By:" (blank)
+            skip_non_empty=False,
+            signature_position="top"  # Options: "top", "bottom", "left", "right"
         )
         # config1 = SignatureConfig(
         #     working_folder="C:\\Users\\Gomathi\\Downloads",
