@@ -4,8 +4,26 @@ const sampleMailData = {
     to: "recipient@example.com; another@example.com",
     cc: "manager@company.com",
     bcc: "",
-    subject: "Project Update - Q1 Results",
-    body: "Dear Team,\n\nI hope this email finds you well. I wanted to provide you with an update on our Q1 project results.\n\nKey achievements:\n• Successfully completed Phase 1 of the project\n• Exceeded target metrics by 15%\n• Received positive feedback from stakeholders\n\nNext steps:\n• Begin Phase 2 implementation\n• Schedule team review meeting\n• Prepare detailed report for management\n\nPlease let me know if you have any questions or concerns.\n\nBest regards,\nProject Manager",
+    subject: "RE: Project Update - Q1 Results",
+    body: "Hi Team,\n\nThank you for the comprehensive update. I have a few follow-up questions:\n\n1. What's the timeline for Phase 2 implementation?\n2. Do we need additional resources for the next quarter?\n3. Can we schedule a stakeholder presentation?\n\nLooking forward to your response.\n\nBest regards,\nJohn Smith",
+    emailHistory: [
+        {
+            from: "project.manager@company.com",
+            to: "recipient@example.com; another@example.com",
+            cc: "manager@company.com",
+            date: "Mon, Jul 7, 2025 at 2:30 PM",
+            subject: "Project Update - Q1 Results",
+            body: "Dear Team,\n\nI hope this email finds you well. I wanted to provide you with an update on our Q1 project results.\n\nKey achievements:\n• Successfully completed Phase 1 of the project\n• Exceeded target metrics by 15%\n• Received positive feedback from stakeholders\n\nNext steps:\n• Begin Phase 2 implementation\n• Schedule team review meeting\n• Prepare detailed report for management\n\nPlease let me know if you have any questions or concerns.\n\nBest regards,\nProject Manager"
+        },
+        {
+            from: "manager@company.com",
+            to: "project.manager@company.com; recipient@example.com; another@example.com",
+            cc: "",
+            date: "Mon, Jul 7, 2025 at 1:15 PM",
+            subject: "RE: Project Update - Q1 Results",
+            body: "Great work team! The results look impressive. \n\nI'd like to add that we should also consider:\n• Budget allocation for Q2\n• Team capacity planning\n• Risk assessment for Phase 2\n\nLet's discuss this in our next meeting.\n\nRegards,\nSarah Johnson\nProject Director"
+        }
+    ],
     attachments: [
         {
             name: "Q1_Report.pdf",
@@ -78,7 +96,31 @@ function populateFields(data) {
         </div>
     `;
     
-    bodyEditor.innerHTML = bodyContent + signatureHtml;
+    // Add email history if available
+    let emailHistoryHtml = '';
+    if (data.emailHistory && data.emailHistory.length > 0) {
+        emailHistoryHtml = '<br><br><div style="border-top: 2px solid #edebe9; margin-top: 30px; padding-top: 20px;">';
+        
+        data.emailHistory.forEach((email, index) => {
+            emailHistoryHtml += `
+                <div style="margin-bottom: 25px; border-left: 3px solid #106ebe; padding-left: 15px;">
+                    <div style="font-size: 13px; color: #605e5c; margin-bottom: 8px; font-weight: 600;">
+                        <strong>From:</strong> ${email.from}<br>
+                        <strong>To:</strong> ${email.to}${email.cc ? '<br><strong>Cc:</strong> ' + email.cc : ''}<br>
+                        <strong>Date:</strong> ${email.date}<br>
+                        <strong>Subject:</strong> ${email.subject}
+                    </div>
+                    <div style="font-size: 14px; line-height: 1.5; color: #323130; background: #faf9f8; padding: 12px; border-radius: 4px;">
+                        ${email.body.replace(/\n/g, '<br>')}
+                    </div>
+                </div>
+            `;
+        });
+        
+        emailHistoryHtml += '</div>';
+    }
+    
+    bodyEditor.innerHTML = bodyContent + signatureHtml + emailHistoryHtml;
     
     // Show CC field if there's CC data
     if (data.cc) {
