@@ -1,8 +1,7 @@
-using Newtonsoft.Json;
+ using Newtonsoft.Json;
 using MsgKit;
 using MsgKit.Enums;
 using System.Text;
-using SystemTask = System.Threading.Tasks.Task;
 
 public class EmailData
 {
@@ -31,15 +30,13 @@ class Program
 {
     static async System.Threading.Tasks.Task Main(string[] args)
     {
-        Console.WriteLine("Outlook MSG Generator");
-        
         try
         {
             string jsonFilePath = args.Length > 0 ? args[0] : "sample-data.json";
             
             if (!File.Exists(jsonFilePath))
             {
-                Console.WriteLine($"Error: File '{jsonFilePath}' not found!");
+                Console.WriteLine($"❌ Error: File '{jsonFilePath}' not found!");
                 return;
             }
 
@@ -48,7 +45,14 @@ class Program
 
             if (emailData == null || string.IsNullOrEmpty(emailData.From) || !emailData.To.Any())
             {
-                Console.WriteLine("Error: Invalid email data!");
+                Console.WriteLine("❌ Error: Invalid email data!");
+                return;
+            }
+
+            // Validate input size for cloud environments
+            if (emailData.Attachments != null && emailData.Attachments.Count > 10)
+            {
+                Console.WriteLine("❌ Error: Too many attachments (max 10 allowed)!");
                 return;
             }
 
@@ -56,19 +60,208 @@ class Program
                 ? Path.Combine(emailData.Destination, GenerateFileName(emailData.Subject))
                 : GenerateFileName(emailData.Subject);
 
-            await GenerateMsgFile(emailData, outputPath);
-            Console.WriteLine($"MSG file created: {outputPath}");
+            await CreateOutlookTemplate(emailData, outputPath);
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Error: {ex.Message}");
+            Console.WriteLine($"❌ Error: {ex.Message}");
         }
     }
 
-    static async System.Threading.Tasks.Task GenerateMsgFile(EmailData emailData, string outputPath)
+    /// <summary>
+    /// Creates an Outlook Template (.oft) file that opens in compose mode
+    /// </summary>
+    static async System.Threading.Tasks.Task CreateOutlookTemplate(EmailData emailData, string outputPath)
     {
-        using var email = new Email(new Sender(emailData.From, emailData.From), emailData.Subject);
+        try
+        {
+            // Ensure we have .oft extension
+            var oftPath = Path.ChangeExtension(outputPath, ".oft");
+            
+            var directory = Path.GetDirectoryName(oftPath);
+            if (!string.IsNullOrEmpty(directory))
+                Directory.CreateDirectory(directory);
+            
+            // Create sender
+            var sender = new Sender(emailData.From, emailData.From);
+            
+            // Create email
+            using var email = new Email(sender, emailData.Subject);
+            
+            // Add recipients
+            foreach (var recipient in emailData.To)
+            {
+                email.Recipients.AddTo(recipient, recipient);
+            }
+                
+            if (emailData.Cc != null)
+                foreach (var recipient in emailData.Cc)
+                {
+                    email.Recipients.AddCc(recipient, recipient);
+                }
+                    
+            if (emailData.Bcc != null)
+                foreach (var recipient in emailData.Bcc)
+                {
+                    email.Recipients.AddBcc(recipient, recipient);
+                }
+
+            // Set HTML body with reply history
+            email.BodyHtml = BuildEmailBody(emailData);
+            email.Importance = MessageImportance.IMPORTANCE_NORMAL;
+
+            // Add attachments
+            if (emailData.Attachments != null && emailData.Attachments.Any())
+            {
+                await AddAttachments(email, emailData.Attachments);
+            }
+
+            // Save as OFT template file
+            using (var fs = new FileStream(oftPath, FileMode.Create))
+            {
+                email.Save(fs);
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"❌ Error creating template: {ex.Message}");
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Builds the email body with reply history formatting
+    /// </summary>
+    public static string BuildEmailBody(EmailData emailData)
+    {
+        var body = new StringBuilder(emailData.Body);
         
+        if (emailData.ReplyHistory != null && emailData.ReplyHistory.Any())
+        {
+            body.AppendLine("<br/><hr/>");
+            body.AppendLine("<div style='color: #666; font-size: 11px;'>");
+            body.AppendLine("<strong>Reply History:</strong>");
+            body.AppendLine("</div>");
+            
+            foreach (var item in emailData.ReplyHistory)
+            {
+                body.AppendLine("<div style='border-left: 3px solid #0078d4; padding-left: 15px; margin: 15px 0; background-color: #f8f9fa;'>");
+                body.AppendLine($"<div style='font-weight: bold; color: #323130;'>From: {item.From}</div>");
+                body.AppendLine($"<div style='color: #605e5c; font-size: 12px;'>Sent: {item.Date:dddd, MMMM dd, yyyy h:mm tt}</div>");
+                
+                if (item.To?.Any() == true) 
+                    body.AppendLine($"<div style='color: #605e5c; font-size: 12px;'>To: {string.Join("; ", item.To)}</div>");
+                    
+                if (item.Cc?.Any() == true) 
+                    body.AppendLine($"<div style='color: #605e5c; font-size: 12px;'>Cc: {string.Join("; ", item.Cc)}</div>");
+                
+                body.AppendLine($"<div style='font-weight: bold; color: #323130; margin-top: 10px;'>Subject: {item.Subject}</div>");
+                body.AppendLine("<br/>");
+                body.AppendLine($"<div style='color: #323130;'>{item.Body}</div>");
+                body.AppendLine("</div>");
+            }
+        }
+        return body.ToString();
+    }
+
+    /// <summary>
+    /// Downloads and adds attachments from URLs or local files with memory-efficient handling
+    /// </summary>
+    static async System.Threading.Tasks.Task AddAttachments(Email email, List<string> attachmentPaths)
+    {
+        // Cloud-friendly: Add timeout and size limits
+        using var httpClient = new HttpClient() 
+        { 
+            Timeout = TimeSpan.FromSeconds(30)
+        };
+        
+        const int maxAttachmentSize = 25 * 1024 * 1024; // 25MB limit for cloud environments
+        
+        foreach (var path in attachmentPaths)
+        {
+            try
+            {
+                byte[] fileBytes;
+                string fileName;
+
+                if (Uri.TryCreate(path, UriKind.Absolute, out var uri) && (uri.Scheme == "http" || uri.Scheme == "https"))
+                {
+                    // Download from URL with proper disposal
+                    using var response = await httpClient.GetAsync(uri);
+                    if (response.IsSuccessStatusCode)
+                    {
+                        // Check content size before downloading
+                        if (response.Content.Headers.ContentLength > maxAttachmentSize)
+                            continue;
+
+                        fileBytes = await response.Content.ReadAsByteArrayAsync();
+                        fileName = Path.GetFileName(uri.LocalPath);
+                        if (string.IsNullOrEmpty(fileName))
+                        {
+                            // Extract filename from Content-Disposition header if available
+                            var contentDisposition = response.Content.Headers.ContentDisposition?.FileName?.Trim('"');
+                            fileName = !string.IsNullOrEmpty(contentDisposition) 
+                                ? contentDisposition 
+                                : $"download_{Guid.NewGuid():N}.bin";
+                        }
+                    }
+                    else
+                    {
+                        continue;
+                    }
+                }
+                else if (File.Exists(path))
+                {
+                    // Check file size before loading
+                    var fileInfo = new FileInfo(path);
+                    if (fileInfo.Length > maxAttachmentSize)
+                        continue;
+
+                    fileBytes = await File.ReadAllBytesAsync(path);
+                    fileName = Path.GetFileName(path);
+                }
+                else
+                {
+                    continue;
+                }
+
+                if (string.IsNullOrEmpty(fileName))
+                    fileName = $"attachment_{Guid.NewGuid():N}.bin";
+                
+                // MsgKit will take ownership of the stream and dispose it when Email is disposed
+                var stream = new MemoryStream(fileBytes);
+                email.Attachments.Add(stream, fileName);
+            }
+            catch (Exception)
+            {
+                // Silently continue on attachment errors
+            }
+        }
+    }
+
+    /// <summary>
+    /// Generates a safe filename for the .oft template
+    /// </summary>
+    public static string GenerateFileName(string subject)
+    {
+        var invalidChars = Path.GetInvalidFileNameChars();
+        var safeSubject = string.Join("_", subject.Split(invalidChars, StringSplitOptions.RemoveEmptyEntries));
+        if (safeSubject.Length > 50) 
+            safeSubject = safeSubject.Substring(0, 50);
+        
+        return $"{safeSubject}_{DateTime.Now:yyyyMMdd_HHmmss}.oft";
+    }
+
+    /// <summary>
+    /// Creates template in memory for API scenarios (Azure App Service, etc.)
+    /// Returns the OFT file as byte array for download/response
+    /// </summary>
+    public static async Task<byte[]> CreateTemplateInMemory(EmailData emailData)
+    {
+        var sender = new Sender(emailData.From, emailData.From);
+        using var email = new Email(sender, emailData.Subject);
+        
+        // Add recipients
         foreach (var recipient in emailData.To)
             email.Recipients.AddTo(recipient, recipient);
             
@@ -80,118 +273,158 @@ class Program
             foreach (var recipient in emailData.Bcc)
                 email.Recipients.AddBcc(recipient, recipient);
 
+        // Set body and importance
         email.BodyHtml = BuildEmailBody(emailData);
         email.Importance = MessageImportance.IMPORTANCE_NORMAL;
 
-        if (emailData.Attachments != null)
+        // Add attachments with size limits
+        if (emailData.Attachments != null && emailData.Attachments.Any())
             await AddAttachments(email, emailData.Attachments);
 
-        var directory = Path.GetDirectoryName(outputPath);
-        if (!string.IsNullOrEmpty(directory))
-            Directory.CreateDirectory(directory);
-        email.Save(outputPath);
+        // Save to memory stream and return bytes
+        using var memoryStream = new MemoryStream();
+        email.Save(memoryStream);
+        return memoryStream.ToArray();
     }
 
-    static string BuildEmailBody(EmailData emailData)
+    /// <summary>
+    /// Cloud-friendly version that returns the file path and validates before processing
+    /// </summary>
+    static async Task<string?> CreateTemplateWithValidation(EmailData emailData, string outputPath)
     {
-        var body = new StringBuilder(emailData.Body);
-        
-        if (emailData.ReplyHistory != null && emailData.ReplyHistory.Any())
-        {
-            body.AppendLine("<br/><hr/>");
-            foreach (var item in emailData.ReplyHistory)
-            {
-                body.AppendLine("<div style='border-left: 3px solid #ccc; padding-left: 10px; margin: 10px 0;'>");
-                body.AppendLine($"<strong>From:</strong> {item.From}<br/>");
-                body.AppendLine($"<strong>Sent:</strong> {item.Date:dddd, MMMM dd, yyyy h:mm tt}<br/>");
-                if (item.To?.Any() == true) body.AppendLine($"<strong>To:</strong> {string.Join("; ", item.To)}<br/>");
-                if (item.Cc?.Any() == true) body.AppendLine($"<strong>Cc:</strong> {string.Join("; ", item.Cc)}<br/>");
-                body.AppendLine($"<strong>Subject:</strong> {item.Subject}<br/><br/>");
-                body.AppendLine(item.Body);
-                body.AppendLine("</div><br/>");
-            }
-        }
-        return body.ToString();
-    }
+        // Validate input data
+        if (emailData == null || string.IsNullOrEmpty(emailData.From) || !emailData.To.Any())
+            return null;
 
-    static async System.Threading.Tasks.Task AddAttachments(Email email, List<string> attachmentUrls)
-    {
-        using var httpClient = new HttpClient();
-        foreach (var url in attachmentUrls)
+        // Check total estimated memory usage for attachments
+        const long maxTotalAttachmentSize = 100 * 1024 * 1024; // 100MB total limit
+        long estimatedSize = 0;
+
+        if (emailData.Attachments != null)
         {
-            try
+            using var httpClient = new HttpClient() { Timeout = TimeSpan.FromSeconds(10) };
+            
+            foreach (var path in emailData.Attachments.Take(10)) // Limit to 10 attachments max
             {
-                if (Uri.TryCreate(url, UriKind.Absolute, out var uri))
+                try
                 {
-                    var response = await httpClient.GetAsync(uri);
-                    if (response.IsSuccessStatusCode)
+                    if (Uri.TryCreate(path, UriKind.Absolute, out var uri) && (uri.Scheme == "http" || uri.Scheme == "https"))
                     {
-                        var fileBytes = await response.Content.ReadAsByteArrayAsync();
-                        var fileName = Path.GetFileName(uri.LocalPath);
-                        if (string.IsNullOrEmpty(fileName))
-                            fileName = $"attachment_{Guid.NewGuid():N}.bin";
-                        
-                        var stream = new MemoryStream(fileBytes);
-                        email.Attachments.Add(stream, fileName);
+                        using var response = await httpClient.SendAsync(new HttpRequestMessage(HttpMethod.Head, uri));
+                        if (response.IsSuccessStatusCode && response.Content.Headers.ContentLength.HasValue)
+                        {
+                            estimatedSize += response.Content.Headers.ContentLength.Value;
+                        }
                     }
+                    else if (File.Exists(path))
+                    {
+                        estimatedSize += new FileInfo(path).Length;
+                    }
+
+                    if (estimatedSize > maxTotalAttachmentSize)
+                        return null; // Too large, reject
+                }
+                catch
+                {
+                    // Skip problematic attachments in size calculation
                 }
             }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Failed to add attachment {url}: {ex.Message}");
-            }
         }
-    }
 
-    static string GenerateFileName(string subject)
-    {
-        var invalidChars = Path.GetInvalidFileNameChars();
-        var safeSubject = string.Join("_", subject.Split(invalidChars, StringSplitOptions.RemoveEmptyEntries));
-        if (safeSubject.Length > 50) safeSubject = safeSubject.Substring(0, 50);
-        return $"{safeSubject}_{DateTime.Now:yyyyMMdd_HHmmss}.msg";
+        // Proceed with creation if size is acceptable
+        await CreateOutlookTemplate(emailData, outputPath);
+        return Path.ChangeExtension(outputPath, ".oft");
     }
 }
 
-
-
+/// <summary>
+/// Cloud-friendly service for creating Outlook templates
+/// </summary>
+public static class EmailTemplateService
 {
-  "from": "john.doe@company.com",
-  "to": [
-    "jane.smith@company.com",
-    "mike.wilson@company.com"
-  ],
-  "cc": [
-    "manager@company.com"
-  ],
-  "subject": "Re: Project Update - Q2 Review",
-  "body": "<html><body><div style='font-family: Calibri, Arial, sans-serif; font-size: 11pt;'><p>Hi team,</p><p>Thank you for the detailed update on the Q2 project review. I've reviewed the documents and have the following feedback:</p><ul><li><strong>Budget Analysis:</strong> The numbers look good overall, but we need to address the variance in the marketing budget.</li><li><strong>Timeline:</strong> The proposed timeline seems realistic, but let's add a 2-week buffer for testing.</li><li><strong>Resource Allocation:</strong> We might need additional developer resources in Q3.</li></ul><p>Please schedule a follow-up meeting to discuss these points in detail.</p><p>Best regards,<br/>John Doe<br/>Project Manager</p></div></body></html>",
-  "attachments": [
-    "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf"
-  ],
-  "destination": "C:\\karthik\\projects\\poc\\outlook-new\\MSG\\msgfiles",
-  "replyHistory": [
+    /// <summary>
+    /// Creates an OFT template and returns it as byte array for web APIs
+    /// Memory-efficient and cloud-optimized
+    /// </summary>
+    public static async Task<(byte[]? FileBytes, string? FileName, string? ErrorMessage)> CreateTemplateAsync(EmailData emailData)
     {
-      "from": "jane.smith@company.com",
-      "date": "2025-07-07T14:30:00Z",
-      "subject": "Project Update - Q2 Review",
-      "body": "<div style='font-family: Calibri, Arial, sans-serif; font-size: 11pt;'><p>Hi John,</p><p>I'm sending the Q2 project review as requested. Please find the key highlights below:</p><ul><li>Budget utilization: 78% of allocated funds</li><li>Timeline: On track with minor delays in testing phase</li><li>Team performance: Excellent across all departments</li></ul><p>The detailed report is attached for your review.</p><p>Looking forward to your feedback.</p><p>Best regards,<br/>Jane Smith<br/>Senior Analyst</p></div>",
-      "to": [
-        "john.doe@company.com"
-      ],
-      "cc": [
-        "manager@company.com"
-      ]
-    },
-    {
-      "from": "manager@company.com",
-      "date": "2025-07-06T09:15:00Z",
-      "subject": "Project Update - Q2 Review",
-      "body": "<div style='font-family: Calibri, Arial, sans-serif; font-size: 11pt;'><p>Team,</p><p>We need to prepare the Q2 review by end of this week. Please ensure all departments submit their reports by Thursday.</p><p>Key areas to focus on:</p><ul><li>Budget analysis</li><li>Timeline adherence</li><li>Resource utilization</li><li>Risk assessment</li></ul><p>Let me know if you need any clarification.</p><p>Thanks,<br/>Sarah Johnson<br/>Department Manager</p></div>",
-      "to": [
-        "john.doe@company.com",
-        "jane.smith@company.com",
-        "mike.wilson@company.com"
-      ]
+        try
+        {
+            // Validate input
+            if (emailData == null || string.IsNullOrEmpty(emailData.From) || !emailData.To.Any())
+                return (null, null, "Invalid email data: from and to fields are required");
+
+            // Cloud limits
+            if (emailData.Attachments?.Count > 10)
+                return (null, null, "Too many attachments (max 10 allowed)");
+
+            if (emailData.Body?.Length > 1_000_000) // 1MB body limit
+                return (null, null, "Email body too large (max 1MB)");
+
+            // Pre-validate attachments size
+            var sizeCheck = await ValidateAttachmentSizes(emailData.Attachments);
+            if (!sizeCheck.IsValid)
+                return (null, null, sizeCheck.ErrorMessage);
+
+            // Create template in memory
+            var fileBytes = await Program.CreateTemplateInMemory(emailData);
+            var fileName = Program.GenerateFileName(emailData.Subject);
+            
+            return (fileBytes, fileName, null);
+        }
+        catch (Exception ex)
+        {
+            return (null, null, $"Error creating template: {ex.Message}");
+        }
     }
-  ]
+
+    /// <summary>
+    /// Validates attachment sizes before downloading to prevent memory issues
+    /// </summary>
+    private static async Task<(bool IsValid, string? ErrorMessage)> ValidateAttachmentSizes(List<string>? attachmentPaths)
+    {
+        if (attachmentPaths == null || !attachmentPaths.Any())
+            return (true, null);
+
+        const long maxTotalSize = 100 * 1024 * 1024; // 100MB total
+        const long maxSingleSize = 25 * 1024 * 1024;  // 25MB per file
+        long totalSize = 0;
+
+        using var httpClient = new HttpClient() { Timeout = TimeSpan.FromSeconds(10) };
+
+        foreach (var path in attachmentPaths.Take(10))
+        {
+            try
+            {
+                long fileSize = 0;
+
+                if (Uri.TryCreate(path, UriKind.Absolute, out var uri) && (uri.Scheme == "http" || uri.Scheme == "https"))
+                {
+                    using var response = await httpClient.SendAsync(new HttpRequestMessage(HttpMethod.Head, uri));
+                    if (response.IsSuccessStatusCode && response.Content.Headers.ContentLength.HasValue)
+                    {
+                        fileSize = response.Content.Headers.ContentLength.Value;
+                    }
+                }
+                else if (File.Exists(path))
+                {
+                    fileSize = new FileInfo(path).Length;
+                }
+
+                if (fileSize > maxSingleSize)
+                    return (false, $"Attachment too large: {Path.GetFileName(path)} ({fileSize:N0} bytes, max {maxSingleSize:N0})");
+
+                totalSize += fileSize;
+                if (totalSize > maxTotalSize)
+                    return (false, $"Total attachments too large ({totalSize:N0} bytes, max {maxTotalSize:N0})");
+            }
+            catch
+            {
+                // Skip validation for problematic URLs/files
+                continue;
+            }
+        }
+
+        return (true, null);
+    }
 }
