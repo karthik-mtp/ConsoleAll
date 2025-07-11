@@ -1,0 +1,124 @@
+Here’s a rewritten version of your architecture notes in a **natural, team-explained style** — it avoids sounding AI-generated and instead reflects **how you’d explain it to a peer, architect, or stakeholder** during documentation or a walkthrough:
+
+---
+
+## 🧭 AIConfirm Architecture – Working Overview
+
+### 1. **Email Handling and Trigger**
+
+We’ve set up a **shared mailbox** to receive trade-related emails from users. These emails can either have a PDF attachment or contain trade data in the email body.
+Whenever a new email lands in this mailbox, a **Logic App** is triggered. It connects to the mailbox, reads the email, and initiates the preprocessing steps.
+
+---
+
+### 2. **Logic App Processing**
+
+Once triggered, the Logic App performs the following:
+
+* If there's a PDF attached, it extracts and uploads the file to a specific **SharePoint folder**.
+* For body-based trade data, it parses the content and sends it to the **Mapping Hub API**, which helps extract and structure key information.
+* After processing, a structured message with essential trade info is pushed to an **Azure Service Bus Topic**, which queues it for downstream processing.
+
+---
+
+### 3. **WebJob & AIConfirm Triggering**
+
+We have a **WebJob** that continuously listens to the Service Bus Topic.
+When a new message is received, the WebJob invokes the **AIConfirm API**, passing along the key email data to kick off the automated trade processing workflow.
+
+---
+
+### 4. **Document Decryption & Data Extraction**
+
+At this stage:
+
+* The AIConfirm API calls a Python-based module hosted in our **Azure App Service**, which removes password protection from the PDF.
+* The decrypted PDF is then re-uploaded to **SharePoint** for consistent access across services.
+* The file is sent to **Azure Document Intelligence** to extract raw text content.
+* The extracted content is stored in the DB and forwarded to **OpenAI**, where we use predefined prompts to parse and format the trade data into a structured **JSON format**.
+
+---
+
+### 5. **Reconciliation**
+
+Once the JSON is available:
+
+* It is passed to the **Recon API**, which performs reconciliation against trade data for both **FX and other product types**.
+* For reconciliation, it also fetches EOS data from our **EOS API**, which is backed by **SQL Server**.
+* The reconciliation status and details are stored in a **Cosmos MongoDB instance** for persistence and reporting.
+
+---
+
+### 6. **Document Signing Flow**
+
+If the reconciliation is successful and approved:
+
+* We generate a signing request using the **DocuSign API**.
+* The PDF is uploaded with pre-set fields and signer info.
+* A signing link is generated and made available to the approver.
+* The approver signs the document in an embedded interface, and once done, the signed copy is sent to the respective counterparty.
+
+---
+
+### 7. **File Management**
+
+Throughout the entire workflow, file upload, retrieval, and updates are handled by the **FileManager API**.
+This service ensures all documents — raw, decrypted, signed — are available as needed by the system at different stages.
+
+---
+
+### 8. **Dashboard and Caching**
+
+We’ve built a dashboard that shows email metadata, processing status, and reconciliation results.
+To improve load times and reduce DB hits, we use a **Redis-based cache layer** (via Redis App Service) that serves real-time data to the dashboard UI.
+
+---
+
+### 9. **Frontend Application**
+
+The UI is built using **Angular**, and it interacts with all the backend services.
+It supports:
+
+* Monitoring incoming emails
+* Viewing and managing trade data
+* Triggering mapping, reconciliation, and signing workflows
+* Visualizing processing status via the dashboard
+
+---
+
+### 10. **Monitoring and Logs**
+
+Every application component is integrated with **Azure Application Insights**, which we use for:
+
+* Centralized logging
+* Performance monitoring
+* Error tracking and alerts
+
+---
+
+## 🧱 Summary of Core Components
+
+| Component             | What It Does                                      |
+| --------------------- | ------------------------------------------------- |
+| Shared Mailbox        | Receives incoming trade emails                    |
+| Logic App             | Extracts and parses email/PDF, triggers pipeline  |
+| Mapping Hub API       | Converts raw trade body to structured data        |
+| SharePoint            | Stores raw/decrypted PDF files                    |
+| Azure Service Bus     | Sends key info from Logic App to WebJob           |
+| WebJob                | Listens to Service Bus, triggers AIConfirm API    |
+| AIConfirm API         | Coordinates decryption, AI analysis, workflow     |
+| Python Module         | Removes PDF password protection                   |
+| Document Intelligence | Extracts text from PDF                            |
+| OpenAI API            | Parses trade info from PDF text                   |
+| Recon API             | Handles reconciliation logic                      |
+| EOS API               | Supplies EOS trade data from SQL Server           |
+| MongoDB (Cosmos)      | Stores reconciliation results                     |
+| Redis                 | Serves fast dashboard data                        |
+| DocuSign API          | Manages document signing process                  |
+| FileManager API       | Handles file access and updates throughout system |
+| Angular Frontend      | Provides user interface for all workflows         |
+| App Insights          | Logs, monitoring, performance tracking            |
+
+---
+
+Let me know if you'd like this exported to Word or PDF for team documentation, or split into **text boxes for embedding into the Draw\.io diagram**.
