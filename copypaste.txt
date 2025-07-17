@@ -1,19 +1,16 @@
-{
-  "type": "object",
-  "properties": {
-    "to": { "type": "string" },
-    "cc": { "type": "string" },
-    "subject": { "type": "string" },
-    "body": { "type": "string" },
-    "attachments": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "properties": {
-          "fileName": { "type": "string" },
-          "contentBytes": { "type": "string" }
-        }
-      }
+ {
+  "to": "person1@example.com;person2@example.com",
+  "cc": "cc1@example.com;cc2@example.com",
+  "subject": "Test Email with Attachments",
+  "body": "<p>Hello Team,</p><p>Please find the reports attached below.</p><p>Regards,<br/>Support Team</p>",
+  "attachments": [
+    {
+      "fileName": "report1.txt",
+      "contentBytes": "VGhpcyBpcyBhIHRlc3QgZmlsZSAxLg=="  // "This is a test file 1."
+    },
+    {
+      "fileName": "report2.csv",
+      "contentBytes": "Y29sdW1uMSxjb2x1bW4yCjEsMgoyLDM="  // column1,column2 \n 1,2 \n 2,3
     }
-  }
+  ]
 }
