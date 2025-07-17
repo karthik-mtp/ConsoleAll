@@ -1,0 +1,19 @@
+{
+  "type": "object",
+  "properties": {
+    "to": { "type": "string" },
+    "cc": { "type": "string" },
+    "subject": { "type": "string" },
+    "body": { "type": "string" },
+    "attachments": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "fileName": { "type": "string" },
+          "contentBytes": { "type": "string" }
+        }
+      }
+    }
+  }
+}
