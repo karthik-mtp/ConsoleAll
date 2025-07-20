@@ -1,16 +1,104 @@
- {
-  "to": "person1@example.com;person2@example.com",
-  "cc": "cc1@example.com;cc2@example.com",
-  "subject": "Test Email with Attachments",
-  "body": "<p>Hello Team,</p><p>Please find the reports attached below.</p><p>Regards,<br/>Support Team</p>",
-  "attachments": [
+using DinkToPdf;
+using DinkToPdf.Contracts;
+using System.Runtime.InteropServices;
+
+namespace HtmlToPdfConverter
+{
+    public class HtmlToPdfService
     {
-      "fileName": "report1.txt",
-      "contentBytes": "VGhpcyBpcyBhIHRlc3QgZmlsZSAxLg=="  // "This is a test file 1."
-    },
-    {
-      "fileName": "report2.csv",
-      "contentBytes": "Y29sdW1uMSxjb2x1bW4yCjEsMgoyLDM="  // column1,column2 \n 1,2 \n 2,3
+        private readonly IConverter _converter;
+
+        public HtmlToPdfService()
+        {
+            if (!CheckForRequiredLibrary())
+            {
+                throw new FileNotFoundException("Required wkhtmltopdf library (libwkhtmltox.dll) not found! Please download wkhtmltopdf and place libwkhtmltox.dll in the same folder as executable or project root folder.");
+            }
+
+            try
+            {
+                _converter = new SynchronizedConverter(new PdfTools());
+            }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException($"Failed to initialize PDF converter: {ex.Message}. Try running as Administrator.");
+            }
+        }
+
+        /// <summary>
+        /// Converts HTML content to PDF bytes
+        /// </summary>
+        /// <param name="htmlContent">The HTML content as string</param>
+        /// <returns>PDF file as byte array</returns>
+        public byte[] ConvertHtmlToPdf(string htmlContent)
+        {
+            if (string.IsNullOrWhiteSpace(htmlContent))
+            {
+                throw new ArgumentException("HTML content cannot be null or empty", nameof(htmlContent));
+            }
+
+            try
+            {
+                // Create PDF document
+                var doc = new HtmlToPdfDocument()
+                {
+                    GlobalSettings = {
+                        ColorMode = ColorMode.Color,
+                        Orientation = Orientation.Portrait,
+                        PaperSize = PaperKind.A4,
+                        Margins = new MarginSettings() { Top = 10, Bottom = 10, Left = 10, Right = 10 }
+                    },
+                    Objects = {
+                        new ObjectSettings() {
+                            PagesCount = true,
+                            HtmlContent = htmlContent,
+                            WebSettings = { DefaultEncoding = "utf-8" }
+                        }
+                    }
+                };
+
+                // Convert and return bytes
+                return _converter.Convert(doc);
+            }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException($"PDF conversion failed: {ex.Message}", ex);
+            }
+        }
+
+        /// <summary>
+        /// Converts HTML file to PDF bytes
+        /// </summary>
+        /// <param name="htmlFilePath">Path to the HTML file</param>
+        /// <returns>PDF file as byte array</returns>
+        public byte[] ConvertHtmlFileToPdf(string htmlFilePath)
+        {
+            if (!File.Exists(htmlFilePath))
+            {
+                throw new FileNotFoundException($"HTML file not found: {htmlFilePath}");
+            }
+
+            string htmlContent = File.ReadAllText(htmlFilePath);
+            return ConvertHtmlToPdf(htmlContent);
+        }
+
+        private static bool CheckForRequiredLibrary()
+        {
+            string libraryName = "libwkhtmltox.dll";
+            string[] searchPaths = {
+                Path.Combine(AppDomain.CurrentDomain.BaseDirectory, libraryName),
+                Path.Combine(Directory.GetCurrentDirectory(), libraryName)
+            };
+
+            foreach (string path in searchPaths)
+            {
+                if (File.Exists(path))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
     }
-  ]
 }
