@@ -1,104 +1,25 @@
-using DinkToPdf;
-using DinkToPdf.Contracts;
-using System.Runtime.InteropServices;
-
-namespace HtmlToPdfConverter
+public static string ReplaceCidImagesWithBase64(string htmlBody, List<InlineAttachment> attachments)
 {
-    public class HtmlToPdfService
+    if (string.IsNullOrWhiteSpace(htmlBody) || attachments == null || attachments.Count == 0)
+        return htmlBody;
+
+    foreach (var attachment in attachments)
     {
-        private readonly IConverter _converter;
+        if (string.IsNullOrEmpty(attachment.ContentId) || string.IsNullOrEmpty(attachment.Base64Content))
+            continue;
 
-        public HtmlToPdfService()
-        {
-            if (!CheckForRequiredLibrary())
-            {
-                throw new FileNotFoundException("Required wkhtmltopdf library (libwkhtmltox.dll) not found! Please download wkhtmltopdf and place libwkhtmltox.dll in the same folder as executable or project root folder.");
-            }
+        // Build base64 img src
+        string base64Src = $"data:{attachment.ContentType};base64,{attachment.Base64Content}";
 
-            try
-            {
-                _converter = new SynchronizedConverter(new PdfTools());
-            }
-            catch (Exception ex)
-            {
-                throw new InvalidOperationException($"Failed to initialize PDF converter: {ex.Message}. Try running as Administrator.");
-            }
-        }
+        // Escape special chars in content ID
+        string cid = attachment.ContentId.Trim('<', '>');
 
-        /// <summary>
-        /// Converts HTML content to PDF bytes
-        /// </summary>
-        /// <param name="htmlContent">The HTML content as string</param>
-        /// <returns>PDF file as byte array</returns>
-        public byte[] ConvertHtmlToPdf(string htmlContent)
-        {
-            if (string.IsNullOrWhiteSpace(htmlContent))
-            {
-                throw new ArgumentException("HTML content cannot be null or empty", nameof(htmlContent));
-            }
-
-            try
-            {
-                // Create PDF document
-                var doc = new HtmlToPdfDocument()
-                {
-                    GlobalSettings = {
-                        ColorMode = ColorMode.Color,
-                        Orientation = Orientation.Portrait,
-                        PaperSize = PaperKind.A4,
-                        Margins = new MarginSettings() { Top = 10, Bottom = 10, Left = 10, Right = 10 }
-                    },
-                    Objects = {
-                        new ObjectSettings() {
-                            PagesCount = true,
-                            HtmlContent = htmlContent,
-                            WebSettings = { DefaultEncoding = "utf-8" }
-                        }
-                    }
-                };
-
-                // Convert and return bytes
-                return _converter.Convert(doc);
-            }
-            catch (Exception ex)
-            {
-                throw new InvalidOperationException($"PDF conversion failed: {ex.Message}", ex);
-            }
-        }
-
-        /// <summary>
-        /// Converts HTML file to PDF bytes
-        /// </summary>
-        /// <param name="htmlFilePath">Path to the HTML file</param>
-        /// <returns>PDF file as byte array</returns>
-        public byte[] ConvertHtmlFileToPdf(string htmlFilePath)
-        {
-            if (!File.Exists(htmlFilePath))
-            {
-                throw new FileNotFoundException($"HTML file not found: {htmlFilePath}");
-            }
-
-            string htmlContent = File.ReadAllText(htmlFilePath);
-            return ConvertHtmlToPdf(htmlContent);
-        }
-
-        private static bool CheckForRequiredLibrary()
-        {
-            string libraryName = "libwkhtmltox.dll";
-            string[] searchPaths = {
-                Path.Combine(AppDomain.CurrentDomain.BaseDirectory, libraryName),
-                Path.Combine(Directory.GetCurrentDirectory(), libraryName)
-            };
-
-            foreach (string path in searchPaths)
-            {
-                if (File.Exists(path))
-                {
-                    return true;
-                }
-            }
-
-            return false;
-        }
+        // Replace src="cid:abc123" or src='cid:abc123'
+        htmlBody = Regex.Replace(htmlBody,
+            $"src=[\"']cid:{Regex.Escape(cid)}[\"']",
+            $"src=\"{base64Src}\"",
+            RegexOptions.IgnoreCase);
     }
+
+    return htmlBody;
 }
