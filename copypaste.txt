@@ -1,25 +1,4 @@
-public static string ReplaceCidImagesWithBase64(string htmlBody, List<InlineAttachment> attachments)
-{
-    if (string.IsNullOrWhiteSpace(htmlBody) || attachments == null || attachments.Count == 0)
-        return htmlBody;
-
-    foreach (var attachment in attachments)
-    {
-        if (string.IsNullOrEmpty(attachment.ContentId) || string.IsNullOrEmpty(attachment.Base64Content))
-            continue;
-
-        // Build base64 img src
-        string base64Src = $"data:{attachment.ContentType};base64,{attachment.Base64Content}";
-
-        // Escape special chars in content ID
-        string cid = attachment.ContentId.Trim('<', '>');
-
-        // Replace src="cid:abc123" or src='cid:abc123'
-        htmlBody = Regex.Replace(htmlBody,
-            $"src=[\"']cid:{Regex.Escape(cid)}[\"']",
-            $"src=\"{base64Src}\"",
-            RegexOptions.IgnoreCase);
-    }
-
-    return htmlBody;
-}
+ string sharepointUrl = "..."; // your SharePoint PDF link
+var uri = new Uri(sharepointUrl);
+string path = uri.AbsolutePath; // e.g. "/sites/site/Shared Documents/file.pdf"
+string fileName = Path.GetFileName(path); // returns "file.pdf"
