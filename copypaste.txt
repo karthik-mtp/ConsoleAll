@@ -1,2 +1,38 @@
-Application Insights ConnStr	APPLICATIONINSIGHTS_CONNECTION_STRING
-Instrumentation Key (Legacy)	APPINSIGHTS_INSTRUMENTATIONKEY
+using Microsoft.Extensions.Logging;
+using System;
+using System.Diagnostics;
+
+public static class LoggerExtensions
+{
+    private static string GetContext()
+    {
+        var frame = new StackTrace().GetFrame(2); // skip 2 frames: this + calling log method
+        var method = frame?.GetMethod();
+        var type = method?.DeclaringType;
+
+        return $"{type?.Namespace}.{type?.Name}.{method?.Name}";
+    }
+
+    public static void LogInfoWithContext(this ILogger logger, string message)
+    {
+        logger.LogInformation("[{Context}] {Message}", GetContext(), message);
+    }
+
+    public static void LogWarningWithContext(this ILogger logger, string message)
+    {
+        logger.LogWarning("[{Context}] {Message}", GetContext(), message);
+    }
+
+    public static void LogDebugWithContext(this ILogger logger, string message)
+    {
+        logger.LogDebug("[{Context}] {Message}", GetContext(), message);
+    }
+
+    public static void LogErrorWithContext(this ILogger logger, string message, Exception ex = null)
+    {
+        if (ex != null)
+            logger.LogError(ex, "[{Context}] {Message}", GetContext(), message);
+        else
+            logger.LogError("[{Context}] {Message}", GetContext(), message);
+    }
+}
