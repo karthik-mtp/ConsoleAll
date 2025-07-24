@@ -1,4 +1,2 @@
- string sharepointUrl = "..."; // your SharePoint PDF link
-var uri = new Uri(sharepointUrl);
-string path = uri.AbsolutePath; // e.g. "/sites/site/Shared Documents/file.pdf"
-string fileName = Path.GetFileName(path); // returns "file.pdf"
+Application Insights ConnStr	APPLICATIONINSIGHTS_CONNECTION_STRING
+Instrumentation Key (Legacy)	APPINSIGHTS_INSTRUMENTATIONKEY
