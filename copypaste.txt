@@ -1,38 +1,72 @@
-using Microsoft.Extensions.Logging;
-using System;
-using System.Diagnostics;
-
-public static class LoggerExtensions
+ namespace QET.RECONCILIATION.API.Models
 {
-    private static string GetContext()
+    public class ReconReport
     {
-        var frame = new StackTrace().GetFrame(2); // skip 2 frames: this + calling log method
-        var method = frame?.GetMethod();
-        var type = method?.DeclaringType;
-
-        return $"{type?.Namespace}.{type?.Name}.{method?.Name}";
+        public string id { get; set; }
+        public string? project { get; set; }
+        public string? report_code { get; set; }
+        public DateTime? creation_date { get; set; }
+        public DateTime? last_modified_date { get; set; }
+        public string? date_created { get; set; }
+        public List<RecReportFilter>? filters { get; set; }
+        public List<string>? reports { get; set; }
+        public DateTime? expires_at { get; set; } = DateTime.Now.AddYears(3);
+        public List<Record>? records { get; set; }
+        public int? records_count { get; set; }
+        public int? match { get; set; }
+        public List<ColumnMatch>? columnmatches { get; set; }
+        public string? blob_url { get; set; }
     }
 
-    public static void LogInfoWithContext(this ILogger logger, string message)
+    public class RecReportFilter
     {
-        logger.LogInformation("[{Context}] {Message}", GetContext(), message);
+        public string? filter_field { get; set; }
+        public string? filter_value { get; set; }
     }
 
-    public static void LogWarningWithContext(this ILogger logger, string message)
+    public class ColumnMatch
     {
-        logger.LogWarning("[{Context}] {Message}", GetContext(), message);
+        public string? field_code { get; set; }
+        public int? match { get; set; }
     }
 
-    public static void LogDebugWithContext(this ILogger logger, string message)
+    public class Record
     {
-        logger.LogDebug("[{Context}] {Message}", GetContext(), message);
+        public RowSets? rowsets { get; set; }
     }
 
-    public static void LogErrorWithContext(this ILogger logger, string message, Exception ex = null)
+    public class RowSets
     {
-        if (ex != null)
-            logger.LogError(ex, "[{Context}] {Message}", GetContext(), message);
-        else
-            logger.LogError("[{Context}] {Message}", GetContext(), message);
+        public List<ColumnSet>? columnsets { get; set; }
+        public int? match { get; set; }
+    }
+
+    public class ColumnSet
+    {
+        public string? field_code { get; set; }
+        public DataSet? dataset { get; set; }
+    }
+
+    public class DataSet
+    {
+        public List<DataItem>? data { get; set; }
+        public int? match { get; set; }
+    }
+
+    public class DataItem
+    {
+        public string? field_code { get; set; }
+        public string? field_value { get; set; }
+        public List<SubRecord>? records { get; set; }
+    }
+
+    public class SubRecord : Record
+    {
+        public string id { get; set; }
+
+        public SubRecord()
+        {
+            id = Guid.NewGuid().ToString();
+        }
     }
 }
