@@ -1,12 +1,6 @@
-{
-  "version": "2.0",
-  "extensions": {
-    "serviceBus": {
-      "messageHandlerOptions": {
-        "autoCompleteMessages": true,
-        "maxConcurrentCalls": 1,             // ❗ only 1 message at a time
-        "maxAutoRenewDuration": "00:10:00"   // extend lock to avoid retries
-      }
-    }
-  }
-}
+ Message Lock Timeout
+Each message has a lock duration (default: 30 seconds).
+
+If your WebJob doesn't complete processing before the lock expires, the message is re-delivered.
+
+That causes the WebJob to trigger again — up to MaxDeliveryCount times.
