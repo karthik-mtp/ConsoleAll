@@ -1,0 +1,12 @@
+{
+  "version": "2.0",
+  "extensions": {
+    "serviceBus": {
+      "messageHandlerOptions": {
+        "autoCompleteMessages": true,
+        "maxConcurrentCalls": 1,             // ❗ only 1 message at a time
+        "maxAutoRenewDuration": "00:10:00"   // extend lock to avoid retries
+      }
+    }
+  }
+}
