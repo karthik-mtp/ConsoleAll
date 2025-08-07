@@ -1,95 +1,42 @@
-using System.Globalization;
+using Microsoft.AspNetCore.Http;
+using System.Collections.Generic;
 
-public class ReconciliationEngine
+namespace Common.HttpUtilities
 {
-    static Func<string?, double> _SafeParseDouble = value =>
-        double.TryParse(value, out double result) ? result : 0;
-
-    static Func<string?, DateTime?> _SafeParseDate = d =>
-        DateTime.TryParseExact(d, "dd/MM/yyyy", CultureInfo.InvariantCulture, DateTimeStyles.None, out DateTime result) ? result : null;
-
-    public static void Reconcile(List<SWAPData> swapDataList, List<EOSTradeConfirmationData> eosDataList)
+    public static class HeaderHelper
     {
-        foreach (var swap in swapDataList.Where(s => !s.is_used))
+        /// <summary>
+        /// Get only UserId and Email headers.
+        /// </summary>
+        public static (string UserId, string Email) GetUserInfo(IHeaderDictionary headers)
         {
-            var swapVolume = _SafeParseDouble(swap.volume);
+            var userId = GetHeader(headers, "UserId");
+            var email = GetHeader(headers, "Email");
+            return (userId, email);
+        }
 
-            // Step 1: Try one-to-one match
-            var eosMatch = eosDataList.FirstOrDefault(eos =>
-                !eos.is_used &&
-                eos.counterparty_name == swap.counterparty_name &&
-                eos.buy_sell == swap.buy_sell &&
-                eos.fixed_price == swap.fixed_price &&
-                eos.uom == swap.uom &&
-                eos.com == swap.com &&
-                eos.trade_date == swap.trade_date &&
-                _SafeParseDouble(eos.total_volume) == swapVolume &&
-                _SafeParseDate(swap.start_date) <= _SafeParseDate(eos.start_date) &&
-                _SafeParseDate(swap.end_date) >= _SafeParseDate(eos.end_date)
-            );
+        /// <summary>
+        /// Get specific header by key.
+        /// </summary>
+        public static string GetHeader(IHeaderDictionary headers, string key)
+        {
+            return headers.TryGetValue(key, out var value) ? value.ToString() : null;
+        }
 
-            if (eosMatch != null)
+        /// <summary>
+        /// Get multiple headers by key list.
+        /// </summary>
+        public static Dictionary<string, string> GetHeaders(IHeaderDictionary headers, List<string> keysToExtract)
+        {
+            var result = new Dictionary<string, string>();
+            foreach (var key in keysToExtract)
             {
-                var groupId = Guid.NewGuid().ToString();
-
-                swap.is_used = true;
-                swap.match_group_id = groupId;
-
-                eosMatch.is_used = true;
-                eosMatch.match_group_id = groupId;
-
-                Console.WriteLine($"✔ One-to-One Match: SWAP {swap.trade_id} ↔ EOS {eosMatch.trade_id} [Group: {groupId}]");
-                continue;
-            }
-
-            // Step 2: Try one-to-many aggregation match
-            var matchingEOS = eosDataList
-                .Where(eos =>
-                    !eos.is_used &&
-                    eos.counterparty_name == swap.counterparty_name &&
-                    eos.buy_sell == swap.buy_sell &&
-                    eos.fixed_price == swap.fixed_price &&
-                    eos.uom == swap.uom &&
-                    eos.com == swap.com &&
-                    eos.trade_date == swap.trade_date &&
-                    _SafeParseDate(swap.start_date) <= _SafeParseDate(eos.start_date) &&
-                    _SafeParseDate(swap.end_date) >= _SafeParseDate(eos.end_date)
-                )
-                .ToList();
-
-            var totalVolume = matchingEOS.Sum(e => _SafeParseDouble(e.total_volume));
-
-            if (Math.Abs(totalVolume - swapVolume) < 0.001 && matchingEOS.Any())
-            {
-                var groupId = Guid.NewGuid().ToString();
-
-                swap.is_used = true;
-                swap.match_group_id = groupId;
-
-                foreach (var eos in matchingEOS)
+                if (headers.TryGetValue(key, out var value))
                 {
-                    eos.is_used = true;
-                    eos.match_group_id = groupId;
+                    result[key] = value.ToString();
                 }
-
-                Console.WriteLine($"✔ One-to-Many Match: SWAP {swap.trade_id} ↔ EOS [{string.Join(", ", matchingEOS.Select(e => e.trade_id))}] [Group: {groupId}]");
             }
+            return result;
         }
-
-        // Tag unmatched for skipping in reconciliation
-        foreach (var swap in swapDataList.Where(s => !s.is_used))
-        {
-            swap.com += "_UNMATCHED";
-            swap.match_group_id = "UNMATCHED_" + Guid.NewGuid().ToString();
-        }
-
-        foreach (var eos in eosDataList.Where(e => !e.is_used))
-        {
-            eos.com += "_UNMATCHED";
-            eos.match_group_id = "UNMATCHED_" + Guid.NewGuid().ToString();
-        }
-
-        Console.WriteLine($"\nUnmatched SWAPs: {swapDataList.Count(s => !s.is_used)}");
-        Console.WriteLine($"Unmatched EOSs: {eosDataList.Count(e => !e.is_used)}");
     }
 }
