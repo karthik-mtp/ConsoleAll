@@ -1,42 +1,29 @@
-using Microsoft.AspNetCore.Http;
-using System.Collections.Generic;
+ import os
+from flask import Flask
+from dotenv import load_dotenv
+from azure.monitor.opentelemetry import configure_azure_monitor
+import logging
 
-namespace Common.HttpUtilities
-{
-    public static class HeaderHelper
-    {
-        /// <summary>
-        /// Get only UserId and Email headers.
-        /// </summary>
-        public static (string UserId, string Email) GetUserInfo(IHeaderDictionary headers)
-        {
-            var userId = GetHeader(headers, "UserId");
-            var email = GetHeader(headers, "Email");
-            return (userId, email);
-        }
+# Load local .env file (only in local dev)
+load_dotenv()
 
-        /// <summary>
-        /// Get specific header by key.
-        /// </summary>
-        public static string GetHeader(IHeaderDictionary headers, string key)
-        {
-            return headers.TryGetValue(key, out var value) ? value.ToString() : null;
-        }
+# Read App Insights connection string
+conn_str = os.getenv("APPLICATIONINSIGHTS_CONNECTION_STRING")
 
-        /// <summary>
-        /// Get multiple headers by key list.
-        /// </summary>
-        public static Dictionary<string, string> GetHeaders(IHeaderDictionary headers, List<string> keysToExtract)
-        {
-            var result = new Dictionary<string, string>();
-            foreach (var key in keysToExtract)
-            {
-                if (headers.TryGetValue(key, out var value))
-                {
-                    result[key] = value.ToString();
-                }
-            }
-            return result;
-        }
-    }
-}
+# Configure Azure Monitor with OpenTelemetry
+if conn_str:
+    configure_azure_monitor(connection_string=conn_str)
+
+app = Flask(__name__)
+
+# Example logging
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+
+@app.route("/")
+def home():
+    logger.info("Home route called 🚀")
+    return "Hello from Flask with Azure App Insights!"
+
+if __name__ == "__main__":
+    app.run(debug=True)
