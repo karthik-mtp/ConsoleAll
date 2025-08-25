@@ -1,29 +1,23 @@
- import os
-from flask import Flask
-from dotenv import load_dotenv
-from azure.monitor.opentelemetry import configure_azure_monitor
-import logging
+FROM python:3.11-slim
 
-# Load local .env file (only in local dev)
-load_dotenv()
+# Install system dependencies (qpdf needed for pikepdf)
+RUN apt-get update && apt-get install -y qpdf \
+    && rm -rf /var/lib/apt/lists/*
 
-# Read App Insights connection string
-conn_str = os.getenv("APPLICATIONINSIGHTS_CONNECTION_STRING")
+# Set working directory
+WORKDIR /app
 
-# Configure Azure Monitor with OpenTelemetry
-if conn_str:
-    configure_azure_monitor(connection_string=conn_str)
+# Copy requirements first (for caching)
+COPY requirements.txt .
 
-app = Flask(__name__)
+# Install Python dependencies
+RUN pip install --no-cache-dir -r requirements.txt
 
-# Example logging
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
+# Copy the app
+COPY . .
 
-@app.route("/")
-def home():
-    logger.info("Home route called 🚀")
-    return "Hello from Flask with Azure App Insights!"
+# Expose port
+EXPOSE 8000
 
-if __name__ == "__main__":
-    app.run(debug=True)
+# Start gunicorn
+CMD ["gunicorn", "--bind=0.0.0.0:8000", "main:app"]
