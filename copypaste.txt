@@ -1,23 +1,39 @@
-FROM python:3.11-slim
+Ah, I see the issue 👌
 
-# Install system dependencies (qpdf needed for pikepdf)
-RUN apt-get update && apt-get install -y qpdf \
-    && rm -rf /var/lib/apt/lists/*
+The key point: **DocuSign embedded signing URLs (Recipient View URLs)** are **one-time use only**.
 
-# Set working directory
-WORKDIR /app
+* Once you open it in an iFrame or browser, DocuSign consumes that URL.
+* When that signing session ends (or when you try to reuse it), DocuSign will not load another document — it will immediately **redirect to the `returnUrl`**.
+* That’s why in your case, when you try to load multiple documents in multiple iFrames, you just see the redirect URL.
 
-# Copy requirements first (for caching)
-COPY requirements.txt .
+### Why this happens
 
-# Install Python dependencies
-RUN pip install --no-cache-dir -r requirements.txt
+* DocuSign expects the signer to complete **all documents in the envelope in one session**.
+* If you try to break it up into multiple parallel iFrames, each signing URL is already “used,” so it redirects.
 
-# Copy the app
-COPY . .
+### Correct approaches
 
-# Expose port
-EXPOSE 8000
+1. **Multiple documents in one envelope** ✅
 
-# Start gunicorn
-CMD ["gunicorn", "--bind=0.0.0.0:8000", "main:app"]
+   * Add all the docs into **one envelope**.
+   * DocuSign will show them in sequence in the same signing ceremony.
+   * One embedded signing URL is enough.
+
+2. **Multiple envelopes (separate docs)** ✅
+
+   * If you *must* keep them separate, create a new envelope for each doc.
+   * For each envelope, generate a fresh `RecipientViewRequest` (embedded signing URL).
+   * You cannot open them all at once in iFrames. Instead:
+
+     * Open one → signer signs → redirect to your app → load next signing URL → repeat.
+
+⚠️ There’s **no way to load multiple envelopes/documents in parallel iFrames** with DocuSign — the system enforces one session per recipient view.
+
+---
+
+👉 To fix your case:
+
+* If your requirement is *“user signs multiple docs in one go”* → put them in **one envelope**.
+* If your requirement is *“user signs them separately”* → you’ll need to **chain multiple signing sessions**, not multiple iFrames.
+
+Do you want me to draft a **C# sample flow** for chaining multiple signing URLs (one after another) so the signer completes all documents in sequence without confusion?
