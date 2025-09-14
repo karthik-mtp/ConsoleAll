@@ -9,43 +9,39 @@ public static class AppInsightsLoggerExtensions
     public static void Info(
         this ILogger logger,
         string projectName,
-        object? variable = null,
-        [CallerArgumentExpression("variable")] string? variableName = null,
+        (string Name, object Value)[]? variables = null,
         [CallerMemberName] string method = "",
         [CallerFilePath] string file = "")
     {
-        Log(logger, LogLevel.Information, projectName, variable, variableName, null, method, file);
+        Log(logger, LogLevel.Information, projectName, variables, null, method, file);
     }
 
     public static void Warning(
         this ILogger logger,
         string projectName,
-        object? variable = null,
-        [CallerArgumentExpression("variable")] string? variableName = null,
+        (string Name, object Value)[]? variables = null,
         [CallerMemberName] string method = "",
         [CallerFilePath] string file = "")
     {
-        Log(logger, LogLevel.Warning, projectName, variable, variableName, null, method, file);
+        Log(logger, LogLevel.Warning, projectName, variables, null, method, file);
     }
 
     public static void Error(
         this ILogger logger,
         string projectName,
-        object? variable = null,
-        [CallerArgumentExpression("variable")] string? variableName = null,
+        (string Name, object Value)[]? variables = null,
         Exception? ex = null,
         [CallerMemberName] string method = "",
         [CallerFilePath] string file = "")
     {
-        Log(logger, LogLevel.Error, projectName, variable, variableName, ex, method, file);
+        Log(logger, LogLevel.Error, projectName, variables, ex, method, file);
     }
 
     private static void Log(
         ILogger logger,
         LogLevel level,
         string projectName,
-        object? variable,
-        string? variableName,
+        (string Name, object Value)[]? variables,
         Exception? ex,
         string method,
         string file)
@@ -60,9 +56,12 @@ public static class AppInsightsLoggerExtensions
             { "Level", level.ToString() }
         };
 
-        if (variable != null && variableName != null)
+        if (variables != null)
         {
-            logObject[variableName] = variable;
+            foreach (var variable in variables)
+            {
+                logObject[variable.Name] = variable.Value;
+            }
         }
 
         if (ex != null)
