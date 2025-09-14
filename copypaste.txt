@@ -1,96 +1,88 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Reflection;
 using System.Text.Json;
-using System.Text.Json.Serialization;
+using System.Runtime.CompilerServices;
+using Microsoft.Extensions.Logging;
 
-// Attribute for field mapping
-[AttributeUsage(AttributeTargets.Property, AllowMultiple = false)]
-public class FieldCodeAttribute : Attribute
+public static class AppInsightsLoggerExtensions
 {
-    public string Code { get; }
-    public FieldCodeAttribute(string code) => Code = code;
-}
-
-// Entity class
-public class MyEntity
-{
-    [FieldCode("Name")]
-    public string Name { get; set; }
-
-    [FieldCode("ID")]
-    public string ID { get; set; }
-
-    [FieldCode("Date")]
-    public string Date { get; set; }
-
-    [FieldCode("Match")]
-    public string Nmatch { get; set; }
-
-    [FieldCode("School")]
-    public string School { get; set; }
-
-    [FieldCode("Price")]
-    public string Price { get; set; }
-}
-
-// JSON structure models
-public class FieldItem
-{
-    [JsonPropertyName("fieldcode")]
-    public string FieldCode { get; set; }
-
-    [JsonPropertyName("fieldvalue")]
-    public string FieldValue { get; set; }
-}
-
-public class JsonRecord
-{
-    [JsonPropertyName("source")]
-    public List<FieldItem> Source { get; set; }
-
-    [JsonPropertyName("target")]
-    public List<FieldItem> Target { get; set; }
-}
-
-public static class JsonToEntityConverter
-{
-    public static List<T> Convert<T>(string json) where T : new()
+    public static void Info(
+        this ILogger logger,
+        string projectName,
+        object? variable = null,
+        [CallerArgumentExpression("variable")] string? variableName = null,
+        [CallerMemberName] string method = "",
+        [CallerFilePath] string file = "")
     {
-        var records = JsonSerializer.Deserialize<List<JsonRecord>>(json);
+        Log(logger, LogLevel.Information, projectName, variable, variableName, null, method, file);
+    }
 
-        var props = typeof(T).GetProperties()
-            .Select(p => new
-            {
-                Property = p,
-                Attribute = p.GetCustomAttribute<FieldCodeAttribute>()
-            })
-            .Where(x => x.Attribute != null)
-            .ToList();
+    public static void Warning(
+        this ILogger logger,
+        string projectName,
+        object? variable = null,
+        [CallerArgumentExpression("variable")] string? variableName = null,
+        [CallerMemberName] string method = "",
+        [CallerFilePath] string file = "")
+    {
+        Log(logger, LogLevel.Warning, projectName, variable, variableName, null, method, file);
+    }
 
-        var list = new List<T>();
+    public static void Error(
+        this ILogger logger,
+        string projectName,
+        object? variable = null,
+        [CallerArgumentExpression("variable")] string? variableName = null,
+        Exception? ex = null,
+        [CallerMemberName] string method = "",
+        [CallerFilePath] string file = "")
+    {
+        Log(logger, LogLevel.Error, projectName, variable, variableName, ex, method, file);
+    }
 
-        foreach (var record in records)
+    private static void Log(
+        ILogger logger,
+        LogLevel level,
+        string projectName,
+        object? variable,
+        string? variableName,
+        Exception? ex,
+        string method,
+        string file)
+    {
+        string className = System.IO.Path.GetFileNameWithoutExtension(file);
+
+        var logObject = new Dictionary<string, object>
         {
-            var entity = new T();
-            var allFields = (record.Source ?? new List<FieldItem>())
-                            .Concat(record.Target ?? new List<FieldItem>());
+            { "Project", projectName },
+            { "Class", className },
+            { "Method", method },
+            { "Level", level.ToString() }
+        };
 
-            foreach (var field in allFields)
-            {
-                var match = props.FirstOrDefault(p =>
-                    string.Equals(p.Attribute.Code, field.FieldCode, StringComparison.OrdinalIgnoreCase));
-
-                if (match != null)
-                {
-                    match.Property.SetValue(entity, field.FieldValue);
-                }
-            }
-
-            list.Add(entity);
+        if (variable != null && variableName != null)
+        {
+            logObject[variableName] = variable;
         }
 
-        return list;
+        if (ex != null)
+        {
+            logObject["Exception"] = new
+            {
+                ex.Message,
+                ex.StackTrace,
+                ex.Source,
+                Type = ex.GetType().FullName
+            };
+        }
+
+        string json = JsonSerializer.Serialize(logObject, new JsonSerializerOptions { WriteIndented = true });
+
+        switch (level)
+        {
+            case LogLevel.Information: logger.LogInformation(json); break;
+            case LogLevel.Warning: logger.LogWarning(json); break;
+            case LogLevel.Error: logger.LogError(json); break;
+        }
     }
 }
