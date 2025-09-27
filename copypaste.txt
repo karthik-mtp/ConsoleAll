@@ -1,87 +1,1049 @@
+
+1 Vessel 
+
+ using System;
+using System.Collections.Generic;
+
 using System;
 using System.Collections.Generic;
-using System.Text.Json;
-using System.Runtime.CompilerServices;
-using Microsoft.Extensions.Logging;
 
-public static class AppInsightsLoggerExtensions
+public class GLAccount
 {
-    public static void Info(
-        this ILogger logger,
-        string projectName,
-        (string Name, object Value)[]? variables = null,
-        [CallerMemberName] string method = "",
-        [CallerFilePath] string file = "")
-    {
-        Log(logger, LogLevel.Information, projectName, variables, null, method, file);
-    }
+    public string ReferenceNumber { get; set; }
+    public string Currency { get; set; }
+    public string Book { get; set; }
+    public decimal NetValue { get; set; }
+    public string BuySell { get; set; }
+    public string ProductType { get; set; }
+}
 
-    public static void Warning(
-        this ILogger logger,
-        string projectName,
-        (string Name, object Value)[]? variables = null,
-        [CallerMemberName] string method = "",
-        [CallerFilePath] string file = "")
-    {
-        Log(logger, LogLevel.Warning, projectName, variables, null, method, file);
-    }
 
-    public static void Error(
-        this ILogger logger,
-        string projectName,
-        (string Name, object Value)[]? variables = null,
-        Exception? ex = null,
-        [CallerMemberName] string method = "",
-        [CallerFilePath] string file = "")
-    {
-        Log(logger, LogLevel.Error, projectName, variables, ex, method, file);
-    }
+public class SourceRow
+{
+    public string ReferenceNumber { get; set; }
+    public string ExternalReference { get; set; }
+    public string InvoiceType { get; set; }
+    public string TradeBuySell { get; set; }
+    public string Currency { get; set; }
+    public string Book { get; set; }
+    public string CargoReference { get; set; }
+    public string TradeId { get; set; }
+    public DateTime InvoiceDate { get; set; }
+    public DateTime? PaymentDate { get; set; }
+    public string Product { get; set; }
+    public string ProductType { get; set; }
+    public string ChargeType { get; set; }
+    public string Location { get; set; }
+    public string Counterparty { get; set; }
+    public string CounterpartyType { get; set; }
+    public string SAPCustomerCode { get; set; }
+    public string SAPVendorCode { get; set; }
+    public decimal NetValue { get; set; }
+    public decimal SpotFXRateUSD { get; set; }
+    public DateTime DeliveryDate { get; set; }
+    public string Vessel { get; set; }
+    // Add any other fields from your VBA source as needed
+}
 
-    private static void Log(
-        ILogger logger,
-        LogLevel level,
-        string projectName,
-        (string Name, object Value)[]? variables,
-        Exception? ex,
-        string method,
-        string file)
-    {
-        string className = System.IO.Path.GetFileNameWithoutExtension(file);
+public class OutputRow
+{
+    public string RowMarker { get; set; }  // Column 0 marker
+    public int CompanyCode { get; set; }  // Column 1
+    public string ReferenceNumber { get; set; }  // Column 2
+    public string DocumentType { get; set; }  // Column 3
+    public DateTime DocumentDate { get; set; }  // Column 4
+    public DateTime PostingDate { get; set; }  // Column 5
+    public string HeaderText { get; set; }  // Column 7
+    public string DocumentCurrency { get; set; }  // Column 9
+    public string PostingKey { get; set; }  // Column 10
+    public string Account { get; set; }  // Column 11
+    public decimal AmountCCY { get; set; }  // Column 13
+    public decimal AmountQAR { get; set; }  // Column 14
+    public decimal AmountUSD { get; set; }  // Column 15
+    public string CostCenter { get; set; }  // Column 16
+    public string ProfitCenter { get; set; }  // Column 17
+    public string AssignmentText { get; set; }  // Column 19
+    public string LineItemText { get; set; }  // Column 20
+    public DateTime RefKey1 { get; set; }  // Column 21
+    public string RefKey2 { get; set; }  // Column 22
+    public string RefKey3 { get; set; }  // Column 23
+    public string ProductType { get; set; }  // Column 32
+    public string ChargeType { get; set; }  // Column 33
+    public string Product { get; set; }  // Column 34
+    // Add more fields as needed
+}
 
-        var logObject = new Dictionary<string, object>
+public class JournalProcessor
+{
+    public List<OutputRow> PrepareJournal(List<SourceRow> sourceRows, DateTime? postingDate = null)
+    {
+        var output = new List<OutputRow>();
+        postingDate ??= DateTime.Today;
+        string lastReference = "";
+
+        foreach (var src in sourceRows)
         {
-            { "Project", projectName },
-            { "Class", className },
-            { "Method", method },
-            { "Level", level.ToString() }
-        };
+            // Compute Buy/Sell
+            string buySell = GetBuySell(src.ReferenceNumber + src.Currency + src.Book);
+            string lineBuySell = src.TradeBuySell;
 
-        if (variables != null)
-        {
-            foreach (var variable in variables)
+            // Skip PrepaymentOffset lines
+            if (src.InvoiceType != "Final-PrepaymentOffset")
             {
-                logObject[variable.Name] = variable.Value;
+                // Check for new reference
+                string combinedRef = src.ReferenceNumber + src.Currency + src.Book;
+                if (combinedRef != lastReference)
+                {
+                    lastReference = combinedRef;
+
+                    decimal totalValue = GetTotalNetValue(combinedRef);
+                    decimal totalValueUSD = GetTotalUSDValue(combinedRef);
+
+                    string sapCounterpartyType = "";
+                    string invDiffBuySell = "";
+                    if (src.InvoiceType == "Invoice for Difference")
+                    {
+                        sapCounterpartyType = buySell == "Buy" ? "Vendor" : "Customer";
+                        if (totalValue < 0 && sapCounterpartyType == "Vendor") invDiffBuySell = "Buy";
+                        else if (totalValue > 0 && sapCounterpartyType == "Vendor") invDiffBuySell = "Sell";
+                        else if (totalValue < 0 && sapCounterpartyType == "Customer") invDiffBuySell = "Buy";
+                        else if (totalValue > 0 && sapCounterpartyType == "Customer") invDiffBuySell = "Sell";
+                    }
+
+                    // Output aggregate line
+                    output.Add(new OutputRow
+                    {
+                        RowMarker = "-",
+                        CompanyCode = 2000,
+                        ReferenceNumber = src.ExternalReference ?? src.ReferenceNumber,
+                        DocumentType = GetDocumentType(src.InvoiceType, src.InvoiceType == "Invoice for Difference" ? invDiffBuySell : buySell, sapCounterpartyType),
+                        DocumentDate = src.InvoiceDate,
+                        PostingDate = postingDate.Value,
+                        HeaderText = string.IsNullOrEmpty(src.CargoReference + src.TradeId) ? "N/A" : src.CargoReference + "/" + src.TradeId,
+                        DocumentCurrency = src.Currency,
+                        PostingKey = GetCustomerVendorPostingKey(src.InvoiceType, src.InvoiceType == "Invoice for Difference" ? invDiffBuySell : buySell, sapCounterpartyType),
+                        Account = GetAccount(src, buySell),
+                        AmountCCY = totalValue,
+                        AmountQAR = Math.Round(totalValueUSD * 3.64m, 2),
+                        AmountUSD = totalValueUSD,
+                        CostCenter = GetCostCenter(src, lineBuySell),
+                        ProfitCenter = GetProfitCentreCode(src.Book),
+                        AssignmentText = GetInvoiceDescription(src.InvoiceType, src.ExternalReference),
+                        LineItemText = (src.Vessel + "," + src.Location).Substring(0, Math.Min(50, (src.Vessel + "," + src.Location).Length)),
+                        RefKey1 = src.DeliveryDate,
+                        RefKey2 = src.TradeId,
+                        RefKey3 = string.IsNullOrEmpty(src.Location) ? "N/A" : src.Location.Substring(0, Math.Min(20, src.Location.Length)),
+                        ProductType = src.ProductType,
+                        ChargeType = src.ChargeType,
+                        Product = src.Product
+                    });
+                }
+
+                // Output individual lines if not Prepayment or Final-PrepaymentOffset
+                if (src.InvoiceType != "Prepayment" && src.InvoiceType != "Final-PrepaymentOffset")
+                {
+                    decimal lineValue = -1 * src.NetValue;
+                    decimal lineValueUSD = lineValue * src.SpotFXRateUSD;
+
+                    output.Add(new OutputRow
+                    {
+                        RowMarker = src.ReferenceNumber, // could use source row number if needed
+                        CompanyCode = 2000,
+                        ReferenceNumber = src.ExternalReference ?? src.ReferenceNumber,
+                        DocumentType = GetDocumentType(src.InvoiceType, src.InvoiceType == "Invoice for Difference" ? invDiffBuySell : lineBuySell, sapCounterpartyType),
+                        DocumentDate = src.InvoiceDate,
+                        PostingDate = postingDate.Value,
+                        HeaderText = string.IsNullOrEmpty(src.CargoReference + src.TradeId) ? "N/A" : src.CargoReference + "/" + src.TradeId,
+                        DocumentCurrency = src.Currency,
+                        PostingKey = GetGLPostingKey(src.InvoiceType, src.InvoiceType == "Invoice for Difference" ? invDiffBuySell : lineBuySell, src.ProductType),
+                        Account = GetGLAccount(src.ProductType, src.Product, src.CounterpartyType, lineBuySell),
+                        AmountCCY = lineValue,
+                        AmountQAR = Math.Round(lineValueUSD * 3.64m, 2),
+                        AmountUSD = lineValueUSD,
+                        CostCenter = GetCostCenter(src, lineBuySell),
+                        ProfitCenter = GetProfitCentreCode(src.Book),
+                        AssignmentText = string.IsNullOrEmpty(src.CargoReference) ? "N/A" : src.CargoReference.Substring(0, Math.Min(18, src.CargoReference.Length)),
+                        LineItemText = string.IsNullOrEmpty(src.Counterparty) ? "" : src.Counterparty.Substring(0, Math.Min(50, src.Counterparty.Length)),
+                        RefKey1 = src.DeliveryDate,
+                        RefKey2 = src.TradeId,
+                        RefKey3 = string.IsNullOrEmpty(src.Location) ? "N/A" : src.Location.Substring(0, Math.Min(20, src.Location.Length)),
+                        ProductType = src.ProductType,
+                        ChargeType = src.ChargeType,
+                        Product = src.Product
+                    });
+                }
             }
         }
 
-        if (ex != null)
+        return output;
+    }
+
+
+
+
+
+
+
+
+    public static class FinanceCalculations
+    {
+
+        private static string GetInvoiceDescription(string invoiceType, string extReference = null)
         {
-            logObject["Exception"] = new
+            if (!string.IsNullOrEmpty(extReference))
+                return extReference;
+
+            return invoiceType switch
             {
-                ex.Message,
-                ex.StackTrace,
-                ex.Source,
-                Type = ex.GetType().FullName
+                "Invoice for Difference" => "EOS APAR InvDiff",
+                "Final" => "EOS APAR Invoice",
+                "Final-Cancellation" => "EOS APAR Canceltn",
+                "Provisional" => "EOS APAR Provsnl",
+                "Provisional-Cancellation" => "EOS APAR Prov Cncl",
+                "Prepayment" => "EOS APAR Prepmt",
+                "Final-PrepaymentOffset" => "EOS Prepmt Offset",
+                _ => "EOS APAR Invoice"
             };
         }
+    }
 
-        string json = JsonSerializer.Serialize(logObject, new JsonSerializerOptions { WriteIndented = true });
 
-        switch (level)
+    // EOSFinanceHubData-based calculations
+    public static string GetBuySell(string strReference, List<EOSFinanceHubData> data)
+    {
+        if (string.IsNullOrWhiteSpace(strReference) || data == null || data.Count == 0)
+            return string.Empty;
+
+        int rowCount = 0;
+        double totDebit = 0;
+        double totCredit = 0;
+        string strBuySell = string.Empty;
+        string strCargoBuySell = string.Empty;
+
+        for (int i = 1; i < data.Count; i++) // mimic VB 2-based indexing
         {
-            case LogLevel.Information: logger.LogInformation(json); break;
-            case LogLevel.Warning: logger.LogWarning(json); break;
-            case LogLevel.Error: logger.LogError(json); break;
+            var row = data[i];
+            string refKey = (row.ReferenceNumber ?? "") + (row.Currency ?? "") + (row.Book ?? "");
+
+            if (refKey == strReference)
+            {
+                rowCount++;
+
+                if (row.NetValue < 0)
+                    totCredit += row.NetValue ?? 0;
+                else
+                    totDebit += row.NetValue ?? 0;
+
+                strBuySell = row.TradeBuySell ?? "";
+
+                // Swap Buy/Sell for FX
+                if (row.ProductType == "Fx")
+                {
+                    if (strBuySell == "Buy")
+                        strBuySell = "Sell";
+                    else if (strBuySell == "Sell")
+                        strBuySell = "Buy";
+                }
+
+                if (row.ProductType == "Cargo")
+                    strCargoBuySell = row.TradeBuySell ?? "";
+            }
         }
+
+        if (rowCount > 1)
+        {
+            if (!string.IsNullOrEmpty(strCargoBuySell))
+                return strCargoBuySell;
+            else
+                return (totDebit + totCredit) > 0 ? "Sell" : "Buy";
+        }
+
+        return strBuySell;
+    }
+
+    public static double GetTotalNetValue(string strReference, List<EOSFinanceHubData> data)
+    {
+        if (string.IsNullOrWhiteSpace(strReference) || data == null || data.Count == 0)
+            return 0.0;
+
+        double dblReturn = 0.0;
+
+        for (int i = 1; i < data.Count; i++)
+        {
+            var row = data[i];
+            string refKey = (row.ReferenceNumber ?? "") + (row.Currency ?? "") + (row.Book ?? "");
+
+            if (refKey == strReference &&
+                !string.Equals(row.InvoiceType, "Final-PrepaymentOffset", StringComparison.OrdinalIgnoreCase))
+            {
+                dblReturn += row.NetValue ?? 0.0;
+            }
+        }
+
+        return dblReturn;
+    }
+
+    public static double GetTotalUSDValue(string strReference, List<EOSFinanceHubData> data)
+    {
+        if (string.IsNullOrWhiteSpace(strReference) || data == null || data.Count == 0)
+            return 0.0;
+
+        double dblReturn = 0.0;
+
+        for (int i = 1; i < data.Count; i++)
+        {
+            var row = data[i];
+            string refKey = (row.ReferenceNumber ?? "") + (row.Currency ?? "") + (row.Book ?? "");
+
+            if (refKey == strReference &&
+                !string.Equals(row.InvoiceType, "Final-PrepaymentOffset", StringComparison.OrdinalIgnoreCase))
+            {
+                dblReturn += (row.NetValue ?? 0.0) * (decimal.ToDouble(row.SpotFXRateUSD ?? 0));
+            }
+        }
+
+        return dblReturn;
+    }
+
+    // PostingKeys-based methods
+    
+
+
+
+
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+2 Derivateivges
+
+
+using System;
+using System.Collections.Generic;
+using System.Linq;
+
+public class SourceRow
+{
+    public string ReferenceNumber { get; set; }
+    public string ExternalReference { get; set; }
+    public string InvoiceType { get; set; }
+    public string TradeBuySell { get; set; }
+    public string Currency { get; set; }
+    public string Book { get; set; }
+    public string CargoReference { get; set; }
+    public string TradeId { get; set; }
+    public DateTime InvoiceDate { get; set; }
+    public DateTime? PaymentDate { get; set; }
+    public string Product { get; set; }
+    public string ProductType { get; set; }
+    public string ChargeType { get; set; }
+    public string Location { get; set; }
+    public string Counterparty { get; set; }
+    public string CounterpartyType { get; set; }
+    public string SAPCustomerCode { get; set; }
+    public string SAPVendorCode { get; set; }
+    public decimal NetValue { get; set; }
+    public decimal SpotFXRateUSD { get; set; }
+    public DateTime DeliveryDate { get; set; }
+    // Add more fields from your source if needed
+}
+
+public class OutputRow
+{
+    public int CompanyCode { get; set; }          // Column 1
+    public string ReferenceNumber { get; set; }   // Column 2
+    public string DocumentType { get; set; }      // Column 3
+    public DateTime DocumentDate { get; set; }    // Column 4
+    public DateTime PostingDate { get; set; }     // Column 5
+    public string HeaderText { get; set; }        // Column 7
+    public string DocumentCurrency { get; set; }  // Column 9
+    public string PostingKey { get; set; }        // Column 10
+    public string Account { get; set; }           // Column 11
+    public decimal AmountCCY { get; set; }        // Column 13
+    public decimal AmountQAR { get; set; }        // Column 14
+    public decimal AmountUSD { get; set; }        // Column 15
+    public string CostCenter { get; set; }        // Column 16
+    public string ProfitCenter { get; set; }      // Column 17
+    public string AssignmentText { get; set; }    // Column 19
+    public string LineItemText { get; set; }      // Column 20
+    public string RefKey1 { get; set; }           // Column 21 (YYYYMM)
+    public string RefKey2 { get; set; }           // Column 22 (Book)
+    public string RefKey3 { get; set; }           // Column 23 (Product)
+    // Add more columns if needed
+    public bool SignErrorFlag { get; set; }       // Flag instead of Excel coloring
+}
+
+public class JournalProcessor
+{
+    public List<OutputRow> PrepareJournal(List<SourceRow> sourceRows, DateTime? postingDate = null)
+    {
+        postingDate ??= DateTime.Today;
+        var output = new List<OutputRow>();
+        string lastReference = "";
+
+        foreach (var src in sourceRows)
+        {
+            string strBuySell = GetBuySell(src.ReferenceNumber + src.Currency);
+            string strLineBuySell = src.TradeBuySell;
+
+            // Skip Final-PrepaymentOffset lines
+            if (src.InvoiceType != "Final-PrepaymentOffset")
+            {
+                string combinedRef = src.ReferenceNumber + src.Currency;
+                if (combinedRef != lastReference)
+                {
+                    lastReference = combinedRef;
+
+                    decimal dblValue = GetTotalNetValue(combinedRef);
+                    decimal dblValueUSD = GetTotalUSDValue(combinedRef);
+
+                    string strSAPCounterpartyType = "";
+                    string strInvDiffBuySell = "";
+
+                    if (src.InvoiceType == "Invoice for Difference")
+                    {
+                        strSAPCounterpartyType = strBuySell == "Buy" ? "Vendor" : "Customer";
+
+                        if (dblValue < 0 && strSAPCounterpartyType == "Vendor") strInvDiffBuySell = "Buy";
+                        else if (dblValue > 0 && strSAPCounterpartyType == "Vendor") strInvDiffBuySell = "Sell";
+                        else if (dblValue < 0 && strSAPCounterpartyType == "Customer") strInvDiffBuySell = "Buy";
+                        else if (dblValue > 0 && strSAPCounterpartyType == "Customer") strInvDiffBuySell = "Sell";
+                    }
+
+                    string strExtReference = src.ExternalReference;
+
+                    var row = new OutputRow
+                    {
+                        CompanyCode = 2000,
+                        ReferenceNumber = !string.IsNullOrEmpty(strExtReference) ? strExtReference : src.ReferenceNumber,
+                        DocumentType = src.InvoiceType == "Invoice for Difference"
+                            ? GetDocumentType(src.InvoiceType, strInvDiffBuySell, strSAPCounterpartyType)
+                            : GetDocumentType(src.InvoiceType, strBuySell),
+                        DocumentDate = src.InvoiceDate,
+                        PostingDate = postingDate.Value,
+                        HeaderText = $"{src.CargoReference}/{src.TradeId}",
+                        DocumentCurrency = src.Currency,
+                        PostingKey = src.InvoiceType == "Invoice for Difference"
+                            ? GetCustomerVendorPostingKey(src.InvoiceType, strInvDiffBuySell, strSAPCounterpartyType)
+                            : GetCustomerVendorPostingKey(src.InvoiceType, strBuySell),
+                        Account = GetCustomerVendorAccount(src, strBuySell),
+                        AmountCCY = dblValue,
+                        AmountQAR = Math.Round(dblValueUSD * 3.64m, 2),
+                        AmountUSD = dblValueUSD,
+                        ProfitCenter = GetProfitCentreCode(src.Book),
+                        AssignmentText = "EOS " + src.ReferenceNumber,
+                        LineItemText = src.Counterparty,
+                        RefKey1 = src.DeliveryDate.ToString("yyyyMM"),
+                        RefKey2 = src.Book,
+                        RefKey3 = src.Product,
+                        SignErrorFlag = SignError(dblValue, strBuySell)
+                    };
+
+                    output.Add(row);
+                }
+
+                // Individual lines (excluding prepayment/final-prepaymentoffset)
+                if (src.InvoiceType != "Prepayment" && src.InvoiceType != "Final-PrepaymentOffset")
+                {
+                    decimal dblValueLine = -1 * src.NetValue;
+                    decimal dblValueUSDLine = dblValueLine * src.SpotFXRateUSD;
+
+                    var lineRow = new OutputRow
+                    {
+                        CompanyCode = 2000,
+                        ReferenceNumber = !string.IsNullOrEmpty(src.ExternalReference) ? src.ExternalReference : src.ReferenceNumber,
+                        DocumentType = src.InvoiceType == "Invoice for Difference"
+                            ? GetDocumentType(src.InvoiceType, strInvDiffBuySell, strSAPCounterpartyType)
+                            : GetDocumentType(src.InvoiceType, strLineBuySell),
+                        DocumentDate = src.InvoiceDate,
+                        PostingDate = postingDate.Value,
+                        HeaderText = $"{src.CargoReference}/{src.TradeId}",
+                        DocumentCurrency = src.Currency,
+                        PostingKey = src.InvoiceType == "Invoice for Difference"
+                            ? GetGLPostingKey(src.InvoiceType, strInvDiffBuySell, strSAPCounterpartyType)
+                            : GetGLPostingKey(src.InvoiceType, strLineBuySell, src.ProductType),
+                        Account = GetGLAccount(src.ProductType, src.Product, src.CounterpartyType, strLineBuySell),
+                        AmountCCY = dblValueLine,
+                        AmountQAR = Math.Round(dblValueUSDLine * 3.64m, 2),
+                        AmountUSD = dblValueUSDLine,
+                        CostCenter = GetCostElement(src.ProductType, src.Product, src.CounterpartyType, strLineBuySell) == "1"
+                            ? GetCostCentreCode(src.Book)
+                            : null,
+                        ProfitCenter = GetProfitCentreCode(src.Book),
+                        AssignmentText = "EOS " + src.ReferenceNumber,
+                        LineItemText = src.Counterparty,
+                        RefKey1 = src.DeliveryDate.ToString("yyyyMM"),
+                        RefKey2 = src.Book,
+                        RefKey3 = src.Product,
+                        SignErrorFlag = SignError(dblValueLine, strLineBuySell)
+                    };
+
+                    output.Add(lineRow);
+                }
+            }
+        }
+
+        return output;
+    }
+
+    // --- Helper placeholders ---
+    private static string GetBuySell(string key) => key.Contains("Buy") ? "Buy" : "Sell";
+    private static decimal GetTotalNetValue(string reference) => 0; // implement
+    private static decimal GetTotalUSDValue(string reference) => 0; // implement
+    private static string GetDocumentType(string invoiceType, string buySell, string counterpartyType = "") => "DOC";
+    private static string GetCustomerVendorPostingKey(string invoiceType, string buySell, string counterpartyType = "") => "PK";
+    private static string GetGLPostingKey(string invoiceType, string buySell, string productType = "") => "GLPK";
+    private static string GetCustomerVendorAccount(SourceRow src, string buySell)
+    {
+        if (buySell.ToUpper() == "SELL" && !string.IsNullOrEmpty(src.SAPCustomerCode)) return src.SAPCustomerCode;
+        if (buySell.ToUpper() == "BUY" && !string.IsNullOrEmpty(src.SAPVendorCode)) return src.SAPVendorCode;
+        return "MISSING!";
+    }
+    private static string GetGLAccount(string productType, string product, string counterpartyType, string buySell) => "GLACC";
+    private static string GetProfitCentreCode(string book) => "PC";
+    private static string GetCostElement(string productType, string product, string counterpartyType, string buySell) => "1";
+    private static string GetCostCentreCode(string book) => "CC";
+    private static bool SignError(decimal value, string postingKey) => false; // implement
+}
+
+
+
+using System;
+using System.Collections.Generic;
+using System.Globalization;
+
+public class FinanceHelpers
+{
+    // Mimics rngSource from VB
+    public static string GetBuySell(string strReference, List<EOSFinanceHubData> source)
+    {
+        string strReturn = "";
+        string strBuySell = "";
+        string strCargoBuySell = "";
+        double totDebit = 0;
+        double totCredit = 0;
+        int rowCount = 0;
+
+        for (int i = 0; i < source.Count; i++)
+        {
+            var row = source[i];
+            if ((row.ReferenceNumber ?? "") + (row.Currency ?? "") == strReference)
+            {
+                rowCount++;
+                if (row.NetValue.HasValue)
+                {
+                    if (row.NetValue < 0) totCredit += row.NetValue.Value;
+                    else totDebit += row.NetValue.Value;
+                }
+
+                strBuySell = row.TradeBuySell ?? "";
+
+                // FX swap
+                if (row.ProductType == "Fx")
+                {
+                    strBuySell = strBuySell == "Buy" ? "Sell" : "Buy";
+                }
+
+                // Cargo row
+                if (row.ProductType == "Cargo")
+                {
+                    strCargoBuySell = row.TradeBuySell ?? "";
+                }
+            }
+        }
+
+        if (rowCount > 1)
+        {
+            strReturn = !string.IsNullOrEmpty(strCargoBuySell) ? strCargoBuySell
+                : (totDebit + totCredit) > 0 ? "Sell" : "Buy";
+        }
+        else
+        {
+            strReturn = strBuySell;
+        }
+
+        return strReturn;
+    }
+
+    public static double GetTotalNetValue(string strReference, List<EOSFinanceHubData> source)
+    {
+        double total = 0;
+
+        for (int i = 0; i < source.Count; i++)
+        {
+            var row = source[i];
+            if ((row.ReferenceNumber ?? "") + (row.Currency ?? "") == strReference
+                && (row.InvoiceType ?? "") != "Final-PrepaymentOffset")
+            {
+                if (row.NetValue.HasValue)
+                    total += row.NetValue.Value;
+            }
+        }
+
+        return total;
+    }
+
+    public static double GetTotalUSDValue(string strReference, List<EOSFinanceHubData> source)
+    {
+        double total = 0;
+
+        for (int i = 0; i < source.Count; i++)
+        {
+            var row = source[i];
+            if ((row.ReferenceNumber ?? "") + (row.Currency ?? "") == strReference
+                && (row.InvoiceType ?? "") != "Final-PrepaymentOffset")
+            {
+                if (row.NetValue.HasValue && row.SpotFXRateUSD.HasValue)
+                    total += row.NetValue.Value * (double)row.SpotFXRateUSD.Value;
+            }
+        }
+
+        return total;
+    }
+
+    // MapPostingKeys lookup
+
+
+
+
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+3. Physc
+
+using System;
+using System.Collections.Generic;
+using System.Linq;
+
+public class Source
+{
+    public string ReferenceNumber { get; set; }
+    public string Currency { get; set; }
+    public string TradeBuySell { get; set; }
+    public string InvoiceType { get; set; }
+    public DateTime InvoiceDate { get; set; }
+    public string ExternalReference { get; set; }
+    public string Vessel { get; set; }
+    public string CargoReference { get; set; }
+    public string Product { get; set; }
+    public string ProductType { get; set; }
+    public string Location { get; set; }
+    public double NetValue { get; set; }
+    public double SpotFXRateUSD { get; set; }
+    public string SAPCustomerCode { get; set; }
+    public string SAPVendorCode { get; set; }
+    public string Book { get; set; }
+    public string CounterpartyType { get; set; }
+    public DateTime DeliveryDate { get; set; }
+    public DateTime PaymentDate { get; set; }
+    public string ChargeType { get; set; }
+    public string TradeId { get; set; }
+}
+
+public class JournalLine
+{
+    public int RowNumber { get; set; }  // corresponds to rngOutput(lngOutputRow,0)
+    public int CompanyCode { get; set; }
+    public string ReferenceNumber { get; set; }
+    public string DocumentType { get; set; }
+    public DateTime DocumentDate { get; set; }
+    public DateTime PostingDate { get; set; }
+    public string HeaderText { get; set; }
+    public string Currency { get; set; }
+    public string PostingKey { get; set; }
+    public string Account { get; set; }
+    public double AmountCCY { get; set; }
+    public double AmountQAR { get; set; }
+    public double AmountUSD { get; set; }
+    public string Product { get; set; }
+    public string ProductType { get; set; }
+    public string ChargeType { get; set; }
+    public string Location { get; set; }
+    public DateTime DeliveryDate { get; set; }
+    public DateTime PaymentDate { get; set; }
+    public string CostCenter { get; set; }
+    public string ProfitCenter { get; set; }
+    public string AssignmentText { get; set; }
+    public string LineItemText { get; set; }
+    public string RefKey1 { get; set; }
+    public string RefKey2 { get; set; }
+    public string RefKey3 { get; set; }
+    public string PaymentReference { get; set; }
+    public string DownpaymentIndicator { get; set; }
+}
+
+public class JournalProcessor
+{
+    public List<JournalLine> PrepareJournal(List<Source> sources, DateTime? postingDate = null)
+    {
+        var output = new List<JournalLine>();
+        DateTime dtePostingDate = postingDate ?? DateTime.Today;
+
+        string strReference = "";
+        string strRef = "";
+        string strSAPCounterpartyType = "";
+        string strInvDiffBuySell = "";
+        string strHeaderText = "";
+
+        foreach (var src in sources)
+        {
+            string strBuySell = GetBuySell(src.ReferenceNumber + src.Currency);
+            string strLineBuySell = src.TradeBuySell;
+
+            // Prepayment handling
+            if (src.InvoiceType != "Final-PrepaymentOffset")
+            {
+                if (src.ReferenceNumber + src.Currency != strReference)
+                {
+                    strReference = src.ReferenceNumber + src.Currency;
+                    strRef = src.ReferenceNumber;
+
+                    double dblValue = GetTotalNetValue(strReference, sources);
+                    double dblValueUSD = GetTotalUSDValue(strReference, sources);
+
+                    if (src.InvoiceType == "Invoice for Difference")
+                    {
+                        strSAPCounterpartyType = strBuySell == "Buy" ? "Vendor" : "Customer";
+                        if (dblValue < 0 && strSAPCounterpartyType == "Vendor") strInvDiffBuySell = "Buy";
+                        else if (dblValue > 0 && strSAPCounterpartyType == "Vendor") strInvDiffBuySell = "Sell";
+                        else if (dblValue < 0 && strSAPCounterpartyType == "Customer") strInvDiffBuySell = "Buy";
+                        else if (dblValue > 0 && strSAPCounterpartyType == "Customer") strInvDiffBuySell = "Sell";
+                    }
+                    else
+                    {
+                        strSAPCounterpartyType = "";
+                        strInvDiffBuySell = "";
+                    }
+
+                    string account = GetAccount(strBuySell, src.SAPCustomerCode, src.SAPVendorCode);
+
+                    // Build the main aggregate journal line
+                    var line = new JournalLine
+                    {
+                        RowNumber = -1,  // marker column
+                        CompanyCode = 2000,
+                        ReferenceNumber = strRef,
+                        DocumentType = src.InvoiceType == "Invoice for Difference"
+                            ? GetDocumentType(src.InvoiceType, strInvDiffBuySell, strSAPCounterpartyType)
+                            : GetDocumentType(src.InvoiceType, strBuySell),
+                        DocumentDate = src.InvoiceDate,
+                        PostingDate = dtePostingDate,
+                        HeaderText = string.IsNullOrEmpty(src.Vessel + "/" + src.TradeId) ? "N/A" : src.Vessel + "/" + src.TradeId,
+                        Currency = src.Currency,
+                        PostingKey = src.InvoiceType == "Invoice for Difference"
+                            ? GetCustomerVendorPostingKey(src.InvoiceType, strInvDiffBuySell, strSAPCounterpartyType)
+                            : GetCustomerVendorPostingKey(src.InvoiceType, strBuySell),
+                        Account = account,
+                        AmountCCY = dblValue,
+                        AmountUSD = dblValueUSD,
+                        AmountQAR = Math.Round(dblValueUSD * 3.64, 2),
+                        Product = src.Product,
+                        ProductType = src.ProductType,
+                        ChargeType = src.ChargeType,
+                        Location = src.Location,
+                        DeliveryDate = src.DeliveryDate,
+                        PaymentDate = src.PaymentDate,
+                        AssignmentText = src.Product,
+                        LineItemText = (src.Vessel + "," + src.Location).Substring(0, Math.Min(50, (src.Vessel + "," + src.Location).Length)),
+                        RefKey1 = src.DeliveryDate.ToString("dd/MM/yyyy"),
+                        RefKey2 = src.TradeId,
+                        RefKey3 = string.IsNullOrEmpty(src.Location) || src.Location == src.Vessel ? "N/A" : src.Location.Substring(0, Math.Min(20, src.Location.Length)),
+                        PaymentReference = string.IsNullOrEmpty(src.ExternalReference) ? "EOS APAR Invoice" : src.ExternalReference,
+                        DownpaymentIndicator = src.InvoiceType == "Prepayment" ? "F" : null
+                    };
+
+                    // Cost / Profit center
+                    string strCostElementCode = GetCostElement(src.ProductType, src.Product, src.CounterpartyType, strLineBuySell);
+                    if (strCostElementCode == "1")
+                        line.CostCenter = GetCostCentreCode(src.Book);
+                    else
+                        line.ProfitCenter = GetProfitCentreCode(src.Book);
+
+                    output.Add(line);
+                }
+            }
+
+            // Output individual P&L lines
+            if (src.InvoiceType != "Prepayment" && src.InvoiceType != "Final-PrepaymentOffset")
+            {
+                double dblValue = src.NetValue * -1;
+                double dblValueUSD = dblValue * src.SpotFXRateUSD;
+
+                var line = new JournalLine
+                {
+                    RowNumber = 0,  // mimic source row number if needed
+                    CompanyCode = 2000,
+                    ReferenceNumber = strRef,
+                    DocumentType = src.InvoiceType == "Invoice for Difference"
+                        ? GetDocumentType(src.InvoiceType, strInvDiffBuySell, strSAPCounterpartyType)
+                        : GetDocumentType(src.InvoiceType, strBuySell),
+                    DocumentDate = src.InvoiceDate,
+                    PostingDate = dtePostingDate,
+                    HeaderText = string.IsNullOrEmpty(src.Vessel) ? "N/A" : src.Vessel.Substring(0, Math.Min(25, src.Vessel.Length)),
+                    Currency = src.Currency,
+                    PostingKey = src.InvoiceType == "Invoice for Difference"
+                        ? GetGLPostingKey(src.InvoiceType, strInvDiffBuySell, strSAPCounterpartyType)
+                        : GetGLPostingKey(src.InvoiceType, strLineBuySell, src.ProductType),
+                    Account = GetGLAccount(src.ProductType, src.Product, src.CounterpartyType, strLineBuySell),
+                    AmountCCY = dblValue,
+                    AmountUSD = dblValueUSD,
+                    AmountQAR = Math.Round(dblValueUSD * 3.64, 2),
+                    ProductType = src.ProductType,
+                    Product = src.Product,
+                    ChargeType = src.ChargeType,
+                    Location = src.Location,
+                    DeliveryDate = src.DeliveryDate,
+                    PaymentDate = src.PaymentDate,
+                    RefKey1 = src.DeliveryDate.ToString("dd/MM/yyyy"),
+                    RefKey2 = src.TradeId,
+                    RefKey3 = string.IsNullOrEmpty(src.Location) || src.Location == src.Vessel ? "N/A" : src.Location.Substring(0, Math.Min(20, src.Location.Length)),
+                    LineItemText = string.IsNullOrEmpty(src.CounterpartyType) ? "N/A" : src.CounterpartyType.Substring(0, Math.Min(50, src.CounterpartyType.Length)),
+                    AssignmentText = string.IsNullOrEmpty(src.CargoReference) ? "N/A" : src.CargoReference.Substring(0, Math.Min(18, src.CargoReference.Length)),
+                    DownpaymentIndicator = null
+                };
+
+                string strCostElementCode = GetCostElement(src.ProductType, src.Product, src.CounterpartyType, strLineBuySell);
+                if (strCostElementCode == "1")
+                    line.CostCenter = GetCostCentreCode(src.Book);
+                else
+                    line.ProfitCenter = GetProfitCentreCode(src.Book);
+
+                output.Add(line);
+            }
+        }
+
+        return output;
+    }
+ 
+
+public static class FinanceHelpers
+{
+    // GetBuySell: mirrors VB logic
+    public static string GetBuySell(string strReference, List<EOSFinanceHubData> source)
+    {
+        string strReturn = "";
+        string strBuySell = "";
+        string strCargoBuySell = "";
+        double totDebit = 0;
+        double totCredit = 0;
+        int rowCount = 0;
+
+        for (int i = 0; i < source.Count; i++)
+        {
+            var row = source[i];
+            if ((row.ReferenceNumber ?? "") + (row.Currency ?? "") == strReference)
+            {
+                rowCount++;
+                if (row.NetValue.HasValue)
+                {
+                    if (row.NetValue < 0) totCredit += row.NetValue.Value;
+                    else totDebit += row.NetValue.Value;
+                }
+
+                strBuySell = row.TradeBuySell ?? "";
+
+                // FX swap
+                if (row.ProductType == "Fx")
+                    strBuySell = strBuySell == "Buy" ? "Sell" : "Buy";
+
+                // Cargo row
+                if (row.ProductType == "Cargo")
+                    strCargoBuySell = row.TradeBuySell ?? "";
+            }
+        }
+
+        if (rowCount > 1)
+            strReturn = !string.IsNullOrEmpty(strCargoBuySell) ? strCargoBuySell : (totDebit + totCredit > 0 ? "Sell" : "Buy");
+        else
+            strReturn = strBuySell;
+
+        return strReturn;
+    }
+
+    public static double GetTotalNetValue(string strReference, List<EOSFinanceHubData> source)
+    {
+        double total = 0;
+
+        for (int i = 0; i < source.Count; i++)
+        {
+            var row = source[i];
+            if ((row.ReferenceNumber ?? "") + (row.Currency ?? "") == strReference
+                && (row.InvoiceType ?? "") != "Final-PrepaymentOffset")
+            {
+                if (row.NetValue.HasValue)
+                    total += row.NetValue.Value;
+            }
+        }
+
+        return total;
+    }
+
+    public static double GetTotalUSDValue(string strReference, List<EOSFinanceHubData> source)
+    {
+        double total = 0;
+
+        for (int i = 0; i < source.Count; i++)
+        {
+            var row = source[i];
+            if ((row.ReferenceNumber ?? "") + (row.Currency ?? "") == strReference
+                && (row.InvoiceType ?? "") != "Final-PrepaymentOffset")
+            {
+                if (row.NetValue.HasValue && row.SpotFXRateUSD.HasValue)
+                    total += row.NetValue.Value * (double)row.SpotFXRateUSD.Value;
+            }
+        }
+
+        return total;
+    }
+
+    // Lookup helpers using PostingKeys list
+    public static string GetDocumentType(string invType, string buySell, List<PostingKeys> map, string sapCounterpartyType = "")
+    {
+        string result = "MISSING!";
+        for (int i = 0; i < map.Count; i++)
+        {
+            var row = map[i];
+            if (string.Equals(row.InvoiceType, invType, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(row.BuySell, buySell, StringComparison.OrdinalIgnoreCase)
+                && (string.IsNullOrEmpty(sapCounterpartyType) || string.Equals(row.CustomerOrVendor, sapCounterpartyType, StringComparison.OrdinalIgnoreCase)))
+            {
+                if (!string.IsNullOrEmpty(row.DocType))
+                    result = row.DocType;
+                break;
+            }
+        }
+        return result;
+    }
+
+    public static string GetCustomerVendorPostingKey(string invType, string buySell, List<PostingKeys> map, string sapCounterpartyType = "")
+    {
+        string result = "MISSING!";
+        for (int i = 0; i < map.Count; i++)
+        {
+            var row = map[i];
+            if (string.Equals(row.InvoiceType, invType, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(row.BuySell, buySell, StringComparison.OrdinalIgnoreCase)
+                && (string.IsNullOrEmpty(sapCounterpartyType) || string.Equals(row.CustomerOrVendor, sapCounterpartyType, StringComparison.OrdinalIgnoreCase)))
+            {
+                if (!string.IsNullOrEmpty(row.CustVendorPostingkey))
+                    result = row.CustVendorPostingkey;
+                break;
+            }
+        }
+        return result;
+    }
+
+    public static string GetGLPostingKey(string invType, string buySell, string productType, List<PostingKeys> map, string sapCounterpartyType = "")
+    {
+        string result = "MISSING!";
+        if (productType == "Fx")
+            buySell = buySell == "Buy" ? "Sell" : "Buy";
+
+        for (int i = 0; i < map.Count; i++)
+        {
+            var row = map[i];
+            if (string.Equals(row.InvoiceType, invType, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(row.BuySell, buySell, StringComparison.OrdinalIgnoreCase)
+                && (string.IsNullOrEmpty(sapCounterpartyType) || string.Equals(row.CustomerOrVendor, sapCounterpartyType, StringComparison.OrdinalIgnoreCase)))
+            {
+                if (!string.IsNullOrEmpty(row.GLPostingKey))
+                    result = row.GLPostingKey;
+                break;
+            }
+        }
+        return result;
+    }
+
+    public static string GetGLAccount(string productType, string product, string counterpartyType, string buySell, List<GLAccount> map)
+    {
+        string result = "MISSING!";
+
+        for (int i = 0; i < map.Count; i++)
+        {
+            var row = map[i];
+            if (string.Equals(row.ProductType, productType, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(row.Product, product, StringComparison.OrdinalIgnoreCase)
+                && (string.Equals(row.CounterpartyType, counterpartyType, StringComparison.OrdinalIgnoreCase) || string.Equals(row.CounterpartyType, "ALL", StringComparison.OrdinalIgnoreCase))
+                && (string.Equals(row.BuySell, buySell, StringComparison.OrdinalIgnoreCase) || string.IsNullOrEmpty(row.BuySell)))
+            {
+                if (!string.IsNullOrEmpty(row.GLAccountPNL))
+                {
+                    result = row.GLAccountPNL;
+                    break;
+                }
+            }
+        }
+
+        return result;
+    }
+
+    public static string GetCostElement(string productType, string product, string counterpartyType, string buySell, List<GLAccount> map)
+    {
+        string result = "MISSING!";
+
+        for (int i = 0; i < map.Count; i++)
+        {
+            var row = map[i];
+            if (string.Equals(row.ProductType, productType, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(row.Product, product, StringComparison.OrdinalIgnoreCase)
+                && (string.Equals(row.CounterpartyType, counterpartyType, StringComparison.OrdinalIgnoreCase) || string.Equals(row.CounterpartyType, "ALL", StringComparison.OrdinalIgnoreCase))
+                && (string.Equals(row.BuySell, buySell, StringComparison.OrdinalIgnoreCase) || string.IsNullOrEmpty(row.BuySell)))
+            {
+                if (!string.IsNullOrEmpty(row.CostElement))
+                {
+                    result = row.CostElement;
+                    break;
+                }
+            }
+        }
+
+        return result;
+    }
+
+    public static string GetCostCentreCode(string book, List<CostProfitCenter> map)
+    {
+        string result = "MISSING!";
+        for (int i = 0; i < map.Count; i++)
+        {
+            var row = map[i];
+            if (string.Equals(row.Book, book, StringComparison.OrdinalIgnoreCase) && !string.IsNullOrEmpty(row.CostProfitCenter))
+            {
+                result = row.CostProfitCenter;
+                break;
+            }
+        }
+        return result;
+    }
+
+    public static string GetProfitCentreCode(string book, List<CostProfitCenter> map)
+    {
+        string result = "MISSING!";
+        for (int i = 0; i < map.Count; i++)
+        {
+            var row = map[i];
+            if (string.Equals(row.Book, book, StringComparison.OrdinalIgnoreCase) && !string.IsNullOrEmpty(row.ProfitCenter))
+            {
+                result = row.ProfitCenter;
+                break;
+            }
+        }
+        return result;
+    }
+
+    public static bool SignError(double value, string postingKey, List<PostingKeyDirection> map)
+    {
+        for (int i = 0; i < map.Count; i++)
+        {
+            var row = map[i];
+            if (row.PostingKey == postingKey)
+            {
+                if (string.Equals(row.Direction, "DEBIT", StringComparison.OrdinalIgnoreCase) && value < 0) return true;
+                if (string.Equals(row.Direction, "CREDIT", StringComparison.OrdinalIgnoreCase) && value > 0) return true;
+                break;
+            }
+        }
+        return false;
     }
 }
+
+
+
+
+
+
+
